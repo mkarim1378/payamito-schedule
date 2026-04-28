@@ -13,7 +13,7 @@ class Payamito_Admin {
     // Menu & Scripts
     // -------------------------------------------------------------------------
 
-    public function add_menu() {
+    public function add_menu(): void {
         add_menu_page(
             'زمان‌بندی پیامک',
             'زمان‌بندی پیامک',
@@ -25,7 +25,7 @@ class Payamito_Admin {
         );
     }
 
-    public function enqueue_scripts($hook) {
+    public function enqueue_scripts(string $hook): void {
         if ($hook !== 'toplevel_page_payamito-scheduler') return;
 
         wp_enqueue_script(
@@ -46,7 +46,7 @@ class Payamito_Admin {
     // Page Rendering
     // -------------------------------------------------------------------------
 
-    public function render_page() {
+    public function render_page(): void {
         if (!current_user_can('manage_options')) return;
 
         settings_errors('payamito_msg');
@@ -66,7 +66,7 @@ class Payamito_Admin {
         <?php
     }
 
-    private function render_credentials_section($credentials) {
+    private function render_credentials_section(array $credentials): void {
         ?>
         <div class="card" style="max-width:100%;margin-top:20px;padding:20px;">
             <h2>🔐 تنظیمات پنل پیامک</h2>
@@ -79,7 +79,7 @@ class Payamito_Admin {
                     </tr>
                     <tr>
                         <th><label>رمز عبور / توکن:</label></th>
-                        <td><input type="text" name="credentials[password]" class="regular-text" value="<?php echo esc_attr($credentials['password']); ?>"></td>
+                        <td><input type="password" name="credentials[password]" class="regular-text" autocomplete="current-password" value="<?php echo esc_attr($credentials['password']); ?>"></td>
                     </tr>
                 </table>
                 <button type="submit" name="save_credentials" class="button button-primary">ذخیره اطلاعات</button>
@@ -89,7 +89,7 @@ class Payamito_Admin {
         <?php
     }
 
-    private function render_test_section() {
+    private function render_test_section(): void {
         ?>
         <div class="card" style="max-width:100%;margin-top:20px;padding:20px;">
             <h2>🧪 تست ارسال پیامک (پترن)</h2>
@@ -122,7 +122,7 @@ class Payamito_Admin {
         <?php
     }
 
-    private function render_rules_section($rules, $statuses) {
+    private function render_rules_section(array $rules, array $statuses): void {
         ?>
         <div class="card" style="max-width:100%;margin-top:20px;padding:20px;">
             <h2>📅 قوانین زمان‌بندی خودکار</h2>
@@ -142,7 +142,7 @@ class Payamito_Admin {
         <?php
     }
 
-    private function render_rule_row($index, $rule, $statuses) {
+    private function render_rule_row(int $index, array $rule, array $statuses): void {
         ?>
         <div class="rule-row" style="border:1px solid #ccc;padding:15px;margin-bottom:10px;background:#fff;">
             <strong>اگر سفارش:</strong>
@@ -154,7 +154,7 @@ class Payamito_Admin {
                 <?php endforeach; ?>
             </select>
             <strong>شد، بعد از:</strong>
-            <input type="number" name="rules[<?php echo $index; ?>][delay_val]" value="<?php echo esc_attr($rule['delay_val'] ?? 0); ?>" style="width:60px;">
+            <input type="number" name="rules[<?php echo $index; ?>][delay_val]" value="<?php echo esc_attr($rule['delay_val'] ?? 0); ?>" min="0" style="width:60px;">
             <select name="rules[<?php echo $index; ?>][delay_unit]">
                 <option value="minutes" <?php selected($rule['delay_unit'] ?? '', 'minutes'); ?>>دقیقه</option>
                 <option value="hours"   <?php selected($rule['delay_unit'] ?? '', 'hours'); ?>>ساعت</option>
@@ -181,13 +181,15 @@ class Payamito_Admin {
     // Form Handling
     // -------------------------------------------------------------------------
 
-    public function handle_submission() {
+    public function handle_submission(): void {
+        if (!current_user_can('manage_options')) return;
+
         $this->handle_credentials();
         $this->handle_test_sms();
         $this->handle_save_rules();
     }
 
-    private function handle_credentials() {
+    private function handle_credentials(): void {
         if (!isset($_POST['save_credentials'])) return;
         check_admin_referer('payamito_save_credentials', 'payamito_credentials_nonce');
 
@@ -199,13 +201,14 @@ class Payamito_Admin {
         add_settings_error('payamito_msg', 'payamito_msg', 'اطلاعات پنل با موفقیت ذخیره شد.', 'success');
     }
 
-    private function handle_test_sms() {
+    private function handle_test_sms(): void {
         if (!isset($_POST['submit_test_sms'])) return;
         check_admin_referer('payamito_test_sms', 'payamito_test_nonce');
 
         $mobile  = sanitize_text_field($_POST['test_mobile'] ?? '');
         $pattern = sanitize_text_field($_POST['test_pattern'] ?? '');
-        $args    = json_decode(stripslashes($_POST['test_args'] ?? ''), true) ?: [];
+        $decoded = json_decode(stripslashes($_POST['test_args'] ?? ''), true);
+        $args    = is_array($decoded) ? $decoded : [];
 
         $credentials = get_option('payamito_credentials', []);
         $api         = new Payamito_Api(
@@ -222,7 +225,7 @@ class Payamito_Admin {
         }
     }
 
-    private function handle_save_rules() {
+    private function handle_save_rules(): void {
         if (!isset($_POST['save_rules'])) return;
         check_admin_referer('payamito_save_rules', 'payamito_rules_nonce');
 
@@ -235,10 +238,10 @@ class Payamito_Admin {
         add_settings_error('payamito_msg', 'payamito_msg', 'قوانین با موفقیت ذخیره شدند.', 'success');
     }
 
-    private function sanitize_rule($r) {
+    private function sanitize_rule(array $r): array {
         return [
             'status'     => sanitize_text_field($r['status']     ?? ''),
-            'delay_val'  => intval($r['delay_val']               ?? 0),
+            'delay_val'  => max(0, (int) ($r['delay_val']        ?? 0)),
             'delay_unit' => sanitize_text_field($r['delay_unit'] ?? 'minutes'),
             'pattern'    => sanitize_text_field($r['pattern']    ?? ''),
             'vars'       => sanitize_textarea_field($r['vars']   ?? ''),

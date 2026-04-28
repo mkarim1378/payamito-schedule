@@ -8,25 +8,31 @@ class Payamito_Scheduler {
         add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],          10, 3);
     }
 
-    public function on_status_change($order_id, $from_status, $to_status, $order) {
+    public function on_status_change(int $order_id, string $from_status, string $to_status, $order): void {
         $rules           = get_option('payamito_schedule_rules', []);
         $prefixed_status = 'wc-' . $to_status;
 
         foreach ($rules as $rule) {
             if ($rule['status'] !== $prefixed_status) continue;
 
-            $delay = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);
+            $delay     = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);
+            $hook_args = [$order_id, $rule['pattern'], $rule['vars']];
+
+            if (wp_next_scheduled('payamito_execute_scheduled_sms', $hook_args)) {
+                continue;
+            }
+
             wp_schedule_single_event(
                 time() + $delay,
                 'payamito_execute_scheduled_sms',
-                [$order_id, $rule['pattern'], $rule['vars']]
+                $hook_args
             );
         }
     }
 
-    public function execute($order_id, $pattern_code, $vars_str) {
+    public function execute(int $order_id, string $pattern_code, string $vars_str): void {
         $order = wc_get_order($order_id);
-        if (!$order) return;
+        if (!$order instanceof WC_Abstract_Order) return;
 
         $phone = $order->get_billing_phone();
         if (empty($phone)) return;
@@ -40,12 +46,12 @@ class Payamito_Scheduler {
         $api->send_pattern_sms($phone, $pattern_code, $this->resolve_vars($vars_str, $order));
     }
 
-    private function resolve_vars($vars_str, $order) {
+    private function resolve_vars(string $vars_str, WC_Abstract_Order $order): array {
         $placeholders = [
             '{billing_first_name}' => $order->get_billing_first_name(),
             '{billing_last_name}'  => $order->get_billing_last_name(),
-            '{order_id}'           => $order->get_id(),
-            '{order_total}'        => $order->get_total(),
+            '{order_id}'           => (string) $order->get_id(),
+            '{order_total}'        => (string) $order->get_total(),
             '{billing_phone}'      => $order->get_billing_phone(),
         ];
 
@@ -64,12 +70,13 @@ class Payamito_Scheduler {
         return $result;
     }
 
-    private function to_seconds($val, $unit) {
-        switch ($unit) {
-            case 'minutes': return $val * 60;
-            case 'hours':   return $val * 3600;
-            case 'days':    return $val * 86400;
-            default:        return 0;
-        }
+    private function to_seconds(int $val, string $unit): int {
+        if ($val <= 0) return 0;
+        return match ($unit) {
+            'minutes' => $val * 60,
+            'hours'   => $val * 3600,
+            'days'    => $val * 86400,
+            default   => 0,
+        };
     }
 }
