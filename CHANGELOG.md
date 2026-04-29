@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.8.1] - 2026-04-29
+
+### Fixed
+- اضافه شدن `Requires PHP: 8.0` به هدر افزونه (استفاده از `str_starts_with` که PHP 8.0+ است)
+- بررسی `function_exists` قبل از فراخوانی توابع Action Scheduler در activation/deactivation hook
+- استفاده از شماره normalize‌شده برای masking در `handle_resend` (به جای شماره خام دیتابیس)
+
+---
+
 ## [2.8.0] - 2026-04-29
 
 ### Added

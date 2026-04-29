@@ -136,9 +136,9 @@ class Payamito_Admin {
             $success ? $now : null
         );
 
-        $masked = strlen($entry['mobile']) > 6
-            ? substr($entry['mobile'], 0, 4) . '****' . substr($entry['mobile'], -3)
-            : $entry['mobile'];
+        $masked = strlen($mobile) > 6
+            ? substr($mobile, 0, 4) . '****' . substr($mobile, -3)
+            : $mobile;
         $order->add_order_note(
             $success
                 ? sprintf('[پیامیتو] ارسال مجدد پترن %s به %s موفق بود.', $entry['pattern'], $masked)
