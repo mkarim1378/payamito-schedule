@@ -51,17 +51,51 @@ class Payamito_Admin {
 
         settings_errors('payamito_msg');
 
-        $rules       = get_option('payamito_schedule_rules', []);
-        $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '']);
-        $statuses    = wc_get_order_statuses();
+        $tab      = sanitize_key($_GET['tab'] ?? 'settings');
+        $base_url = admin_url('admin.php?page=payamito-scheduler');
         ?>
         <div class="wrap">
-            <h1>تنظیمات زمان‌بندی و تست پیامک (پیامیتو)</h1>
-            <?php
-            $this->render_credentials_section($credentials);
-            $this->render_test_section();
-            $this->render_rules_section($rules, $statuses);
-            ?>
+            <h1>زمان‌بندی پیامک (پیامیتو)</h1>
+            <nav class="nav-tab-wrapper" style="margin-bottom:0;">
+                <a href="<?php echo esc_url($base_url); ?>"
+                   class="nav-tab <?php echo $tab === 'settings' ? 'nav-tab-active' : ''; ?>">
+                    ⚙️ تنظیمات
+                </a>
+                <a href="<?php echo esc_url(add_query_arg('tab', 'log', $base_url)); ?>"
+                   class="nav-tab <?php echo $tab === 'log' ? 'nav-tab-active' : ''; ?>">
+                    📋 تاریخچه ارسال
+                </a>
+            </nav>
+            <?php if ($tab === 'log') : ?>
+                <?php $this->render_log_tab(); ?>
+            <?php else : ?>
+                <?php
+                $rules       = get_option('payamito_schedule_rules', []);
+                $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'log_retention_days' => 90]);
+                $statuses    = wc_get_order_statuses();
+                $this->render_credentials_section($credentials);
+                $this->render_test_section();
+                $this->render_rules_section($rules, $statuses);
+                ?>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    private function render_log_tab(): void {
+        $table = new Payamito_Log_List_Table();
+        $table->prepare_items();
+        ?>
+        <div style="margin-top:20px;">
+            <?php $table->views(); ?>
+            <form method="get">
+                <input type="hidden" name="page" value="payamito-scheduler">
+                <input type="hidden" name="tab"  value="log">
+                <?php if (!empty($_GET['status_filter'])) : ?>
+                    <input type="hidden" name="status_filter" value="<?php echo esc_attr($_GET['status_filter']); ?>">
+                <?php endif; ?>
+                <?php $table->display(); ?>
+            </form>
         </div>
         <?php
     }
@@ -80,6 +114,14 @@ class Payamito_Admin {
                     <tr>
                         <th><label>رمز عبور / توکن:</label></th>
                         <td><input type="password" name="credentials[password]" class="regular-text" autocomplete="current-password" value="<?php echo esc_attr($credentials['password']); ?>"></td>
+                    </tr>
+                    <tr>
+                        <th><label>نگهداری لاگ (روز):</label></th>
+                        <td>
+                            <input type="number" name="credentials[log_retention_days]" min="1" style="width:80px;"
+                                   value="<?php echo esc_attr($credentials['log_retention_days'] ?? 90); ?>">
+                            <p class="description">لاگ‌های قدیمی‌تر از این تعداد روز به صورت خودکار حذف می‌شوند.</p>
+                        </td>
                     </tr>
                 </table>
                 <button type="submit" name="save_credentials" class="button button-primary">ذخیره اطلاعات</button>
@@ -195,8 +237,9 @@ class Payamito_Admin {
 
         $raw = $_POST['credentials'] ?? [];
         update_option('payamito_credentials', [
-            'username' => sanitize_text_field($raw['username'] ?? ''),
-            'password' => sanitize_text_field($raw['password'] ?? ''),
+            'username'           => sanitize_text_field($raw['username'] ?? ''),
+            'password'           => sanitize_text_field($raw['password'] ?? ''),
+            'log_retention_days' => max(1, intval($raw['log_retention_days'] ?? 90)),
         ]);
         add_settings_error('payamito_msg', 'payamito_msg', 'اطلاعات پنل با موفقیت ذخیره شد.', 'success');
     }
