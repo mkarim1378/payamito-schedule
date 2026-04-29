@@ -116,9 +116,16 @@ class Payamito_Admin {
             }
         }
 
+        try {
+            $mobile = Payamito_Scheduler::normalize_phone($entry['mobile']);
+        } catch (\InvalidArgumentException $e) {
+            wp_safe_redirect($back);
+            exit;
+        }
+
         $credentials = get_option('payamito_credentials', []);
         $api         = new Payamito_Api($credentials['username'] ?? '', $credentials['password'] ?? '');
-        $result      = $api->send_pattern_sms($entry['mobile'], $entry['pattern'], $sms_args);
+        $result      = $api->send_pattern_sms($mobile, $entry['pattern'], $sms_args);
         $success     = $result !== null;
         $now         = current_time('mysql');
 

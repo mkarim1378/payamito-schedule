@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.8.0] - 2026-04-29
+
+### Added
+- متد `Payamito_Scheduler::normalize_phone()` برای نرمال‌سازی شماره موبایل ایرانی
+- پشتیبانی از فرمت‌های `+98`, `0098`, `98XXXXXXXXXX` و `09XXXXXXXXX`
+- در صورت شماره نامعتبر، لاگ با `status=failed` و دلیل `invalid_phone` ثبت می‌شود بدون retry
+- یادداشت داخلی سفارش در صورت شماره نامعتبر
+- اعمال normalize در `handle_resend` ادمین نیز
+
+---
+
 ## [2.7.0] - 2026-04-29
 
 ### Changed

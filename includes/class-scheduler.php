@@ -51,6 +51,29 @@ class Payamito_Scheduler {
         $phone = $order->get_billing_phone();
         if (empty($phone)) return;
 
+        $now = current_time('mysql');
+
+        try {
+            $phone = self::normalize_phone($phone);
+        } catch (\InvalidArgumentException $e) {
+            Payamito_Logger::insert([
+                'order_id'     => $order_id,
+                'mobile'       => $order->get_billing_phone(),
+                'pattern'      => $pattern_code,
+                'vars'         => $vars_str,
+                'status'       => 'failed',
+                'response'     => $e->getMessage(),
+                'attempt'      => $attempt,
+                'scheduled_at' => $scheduled_at ?? $now,
+                'sent_at'      => null,
+            ]);
+            $order->add_order_note(
+                sprintf('[پیامیتو] شماره تلفن سفارش نامعتبر است — ارسال پترن %s لغو شد.', $pattern_code),
+                false, false
+            );
+            return;
+        }
+
         $credentials = get_option('payamito_credentials', []);
         $api         = new Payamito_Api(
             $credentials['username'] ?? '',
@@ -59,7 +82,6 @@ class Payamito_Scheduler {
 
         $sms_args = $this->resolve_vars($vars_str, $order);
         $result   = $api->send_pattern_sms($phone, $pattern_code, $sms_args);
-        $now      = current_time('mysql');
         $success  = $result !== null;
         $masked   = $this->mask_phone($phone);
 
@@ -126,6 +148,22 @@ class Payamito_Scheduler {
     private function format_delay(int $seconds): string {
         if ($seconds < HOUR_IN_SECONDS) return (int) ($seconds / 60) . ' دقیقه';
         return (int) ($seconds / HOUR_IN_SECONDS) . ' ساعت';
+    }
+
+    public static function normalize_phone(string $phone): string {
+        $phone = preg_replace('/\D/', '', $phone);
+
+        if (str_starts_with($phone, '0098')) {
+            $phone = '0' . substr($phone, 4);
+        } elseif (str_starts_with($phone, '98') && strlen($phone) === 12) {
+            $phone = '0' . substr($phone, 2);
+        }
+
+        if (strlen($phone) !== 11 || !str_starts_with($phone, '09')) {
+            throw new \InvalidArgumentException("invalid_phone: {$phone}");
+        }
+
+        return $phone;
     }
 
     private function mask_phone(string $phone): string {
