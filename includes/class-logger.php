@@ -160,6 +160,34 @@ class Payamito_Logger {
         return $stats;
     }
 
+    public static function get_by_order(int $order_id): array {
+        global $wpdb;
+        $table = self::table();
+        return $wpdb->get_results(
+            $wpdb->prepare("SELECT * FROM $table WHERE order_id = %d ORDER BY id DESC", $order_id),
+            ARRAY_A
+        ) ?: [];
+    }
+
+    public static function get_by_id(int $id): ?array {
+        global $wpdb;
+        $table = self::table();
+        $row   = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $id), ARRAY_A);
+        return $row ?: null;
+    }
+
+    public static function update_status(int $id, string $status, ?string $response, ?string $sent_at): void {
+        global $wpdb;
+        $wpdb->update(
+            self::table(),
+            ['status' => $status, 'response' => $response, 'sent_at' => $sent_at],
+            ['id' => $id],
+            ['%s', '%s', '%s'],
+            ['%d']
+        );
+        delete_transient('payamito_stats_cache');
+    }
+
     public static function purge_old(int $days = 90): int {
         global $wpdb;
         $table = self::table();

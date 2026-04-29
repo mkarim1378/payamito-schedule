@@ -6,25 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.1.0] - 2026-04-28
+## [2.4.0] - 2026-04-29
 
-### Security
-- اتصال SOAP از HTTP به HTTPS تغییر یافت تا اطلاعات احراز هویت رمزنگاری‌شده منتقل شوند
-- فیلد رمز عبور در پنل ادمین از `type="text"` به `type="password"` تغییر یافت
-- بررسی `current_user_can('manage_options')` به ابتدای `handle_submission` منتقل شد تا تمام هندلرها را پوشش دهد
-
-### Performance
-- گزینه‌های `connection_timeout` (۱۰ ثانیه) و `cache_wsdl` به `SoapClient` اضافه شدند تا از هنگ و درخواست‌های تکراری WSDL جلوگیری شود
-- برای جلوگیری از ثبت رویداد cron تکراری، پیش از `wp_schedule_single_event` بررسی `wp_next_scheduled` انجام می‌شود
-
-### Changed
-- نوع‌بندی صریح (type hints) به تمام متدهای کلاس‌ها اضافه شد (PHP 8.0)
-- سازنده `Payamito_Api` به constructor property promotion بازنویسی شد
-- `switch/case` در `to_seconds` با `match` expression جایگزین شد
-- بررسی `instanceof WC_Abstract_Order` در `execute` جایگزین بررسی falsy ساده شد
-- مقدار `delay_val` با `max(0, ...)` در `sanitize_rule` اعتبارسنجی می‌شود تا اعداد منفی ذخیره نشوند
-- در `handle_test_sms` بررسی `is_array` پس از `json_decode` اضافه شد
-- ویژگی `min="0"` به فیلد `delay_val` در فرم HTML اضافه شد
+### Added
+- Meta Box «پیامک‌های پیامیتو» در صفحه ویرایش سفارش (ستون کناری)
+- نمایش تمام پیامک‌های ارسال‌شده/ناموفق/لغوشده برای آن سفارش با شماره ماسک‌شده و زمان
+- دکمه «ارسال مجدد» برای پیامک‌های ناموفق با بازپردازش vars از داده‌های جاری سفارش
+- ثبت یادداشت داخلی سفارش پس از هر ارسال مجدد
+- متدهای `Payamito_Logger::get_by_order()`, `get_by_id()`, `update_status()`
+- سازگاری با HPOS: callback meta box هم `WP_Post` هم `WC_Abstract_Order` را می‌پذیرد
 
 ---
 
@@ -65,6 +55,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - متد `execute` در `Payamito_Scheduler` اکنون نتیجه هر ارسال را لاگ می‌کند
+
+---
+
+## [2.0.1] - 2026-04-28
+
+### Security
+- اتصال SOAP از HTTP به HTTPS تغییر یافت تا اطلاعات احراز هویت رمزنگاری‌شده منتقل شوند
+- فیلد رمز عبور در پنل ادمین از `type="text"` به `type="password"` تغییر یافت
+- بررسی `current_user_can('manage_options')` به ابتدای `handle_submission` منتقل شد تا تمام هندلرها را پوشش دهد
+
+### Performance
+- گزینه‌های `connection_timeout` (۱۰ ثانیه) و `cache_wsdl` به `SoapClient` اضافه شدند تا از هنگ و درخواست‌های تکراری WSDL جلوگیری شود
+- برای جلوگیری از ثبت رویداد cron تکراری، پیش از `wp_schedule_single_event` بررسی `wp_next_scheduled` انجام می‌شود
+
+### Changed
+- نوع‌بندی صریح (type hints) به تمام متدهای کلاس‌ها اضافه شد (PHP 8.0)
+- سازنده `Payamito_Api` به constructor property promotion بازنویسی شد
+- `switch/case` در `to_seconds` با `match` expression جایگزین شد
+- بررسی `instanceof WC_Abstract_Order` در `execute` جایگزین بررسی falsy ساده شد
+- مقدار `delay_val` با `max(0, ...)` در `sanitize_rule` اعتبارسنجی می‌شود تا اعداد منفی ذخیره نشوند
+- در `handle_test_sms` بررسی `is_array` پس از `json_decode` اضافه شد
+- ویژگی `min="0"` به فیلد `delay_val` در فرم HTML اضافه شد
 
 ---
 

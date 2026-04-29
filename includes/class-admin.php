@@ -4,14 +4,142 @@ if (!defined('ABSPATH')) exit;
 class Payamito_Admin {
 
     public function __construct() {
-        add_action('admin_menu',             [$this, 'add_menu']);
-        add_action('admin_init',             [$this, 'handle_submission']);
-        add_action('admin_enqueue_scripts',  [$this, 'enqueue_scripts']);
+        add_action('admin_menu',                        [$this, 'add_menu']);
+        add_action('admin_init',                        [$this, 'handle_submission']);
+        add_action('admin_enqueue_scripts',             [$this, 'enqueue_scripts']);
+        add_action('add_meta_boxes',                    [$this, 'register_meta_box']);
+        add_action('admin_post_payamito_resend_sms',    [$this, 'handle_resend']);
     }
 
     // -------------------------------------------------------------------------
     // Menu & Scripts
     // -------------------------------------------------------------------------
+
+    public function register_meta_box(): void {
+        $screen = function_exists('wc_get_page_screen_id')
+            ? wc_get_page_screen_id('shop-order')
+            : 'shop_order';
+
+        add_meta_box(
+            'payamito_sms_status',
+            'پیامک‌های پیامیتو',
+            [$this, 'render_order_meta_box'],
+            $screen,
+            'side',
+            'default'
+        );
+    }
+
+    public function render_order_meta_box($post_or_order): void {
+        $order_id = $post_or_order instanceof WC_Abstract_Order
+            ? $post_or_order->get_id()
+            : (int) $post_or_order->ID;
+
+        $entries = Payamito_Logger::get_by_order($order_id);
+
+        if (empty($entries)) {
+            echo '<p style="color:#999;font-size:12px;">هیچ پیامکی برای این سفارش ثبت نشده.</p>';
+            return;
+        }
+
+        $status_map = [
+            'sent'      => '<span style="color:#2ea44f">✓ ارسال‌شده</span>',
+            'failed'    => '<span style="color:#cf222e">✗ ناموفق</span>',
+            'cancelled' => '<span style="color:#999">⊘ لغوشده</span>',
+        ];
+
+        foreach ($entries as $entry) :
+            $masked = strlen($entry['mobile']) > 6
+                ? substr($entry['mobile'], 0, 4) . '****' . substr($entry['mobile'], -3)
+                : $entry['mobile'];
+            ?>
+            <div style="border:1px solid #ddd;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <strong>پترن: <?php echo esc_html($entry['pattern']); ?></strong>
+                    <?php echo $status_map[$entry['status']] ?? esc_html($entry['status']); ?>
+                </div>
+                <div style="color:#666;">📱 <?php echo esc_html($masked); ?></div>
+                <div style="color:#666;">🕐 <?php echo esc_html($entry['scheduled_at']); ?></div>
+                <?php if ($entry['sent_at']) : ?>
+                    <div style="color:#666;">✅ <?php echo esc_html($entry['sent_at']); ?></div>
+                <?php endif; ?>
+                <?php if ($entry['status'] === 'failed') : ?>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
+                        <?php wp_nonce_field('payamito_resend_sms', 'payamito_resend_nonce'); ?>
+                        <input type="hidden" name="action" value="payamito_resend_sms">
+                        <input type="hidden" name="log_id"  value="<?php echo (int) $entry['id']; ?>">
+                        <button type="submit" class="button button-small">🔄 ارسال مجدد</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        <?php endforeach;
+    }
+
+    public function handle_resend(): void {
+        check_admin_referer('payamito_resend_sms', 'payamito_resend_nonce');
+        if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
+
+        $log_id = (int) ($_POST['log_id'] ?? 0);
+        $entry  = Payamito_Logger::get_by_id($log_id);
+        $back   = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
+
+        if (!$entry) {
+            wp_safe_redirect($back);
+            exit;
+        }
+
+        $order = wc_get_order((int) $entry['order_id']);
+        if (!$order instanceof WC_Abstract_Order) {
+            wp_safe_redirect($back);
+            exit;
+        }
+
+        // resolve vars against current order data
+        $placeholders = [
+            '{billing_first_name}' => $order->get_billing_first_name(),
+            '{billing_last_name}'  => $order->get_billing_last_name(),
+            '{order_id}'           => (string) $order->get_id(),
+            '{order_total}'        => (string) $order->get_total(),
+            '{billing_phone}'      => $order->get_billing_phone(),
+        ];
+        $sms_args = [];
+        foreach (explode(';', $entry['vars']) as $pair) {
+            [$k, $v] = array_pad(explode(':', trim($pair), 2), 2, '');
+            if (trim($k) !== '') {
+                $sms_args[trim($k)] = str_replace(
+                    array_keys($placeholders),
+                    array_values($placeholders),
+                    trim($v)
+                );
+            }
+        }
+
+        $credentials = get_option('payamito_credentials', []);
+        $api         = new Payamito_Api($credentials['username'] ?? '', $credentials['password'] ?? '');
+        $result      = $api->send_pattern_sms($entry['mobile'], $entry['pattern'], $sms_args);
+        $success     = $result !== null;
+        $now         = current_time('mysql');
+
+        Payamito_Logger::update_status(
+            $log_id,
+            $success ? 'sent' : 'failed',
+            $success ? (is_object($result) ? print_r($result, true) : (string) $result) : null,
+            $success ? $now : null
+        );
+
+        $masked = strlen($entry['mobile']) > 6
+            ? substr($entry['mobile'], 0, 4) . '****' . substr($entry['mobile'], -3)
+            : $entry['mobile'];
+        $order->add_order_note(
+            $success
+                ? sprintf('[پیامیتو] ارسال مجدد پترن %s به %s موفق بود.', $entry['pattern'], $masked)
+                : sprintf('[پیامیتو] ارسال مجدد پترن %s به %s ناموفق بود.', $entry['pattern'], $masked),
+            false, false
+        );
+
+        wp_safe_redirect($back);
+        exit;
+    }
 
     public function add_menu(): void {
         add_menu_page(
