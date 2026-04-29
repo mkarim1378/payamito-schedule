@@ -65,9 +65,15 @@ class Payamito_Admin {
                    class="nav-tab <?php echo $tab === 'log' ? 'nav-tab-active' : ''; ?>">
                     📋 تاریخچه ارسال
                 </a>
+                <a href="<?php echo esc_url(add_query_arg('tab', 'stats', $base_url)); ?>"
+                   class="nav-tab <?php echo $tab === 'stats' ? 'nav-tab-active' : ''; ?>">
+                    📊 آمار
+                </a>
             </nav>
             <?php if ($tab === 'log') : ?>
                 <?php $this->render_log_tab(); ?>
+            <?php elseif ($tab === 'stats') : ?>
+                <?php $this->render_stats_tab(); ?>
             <?php else : ?>
                 <?php
                 $rules       = get_option('payamito_schedule_rules', []);
@@ -96,6 +102,102 @@ class Payamito_Admin {
                 <?php endif; ?>
                 <?php $table->display(); ?>
             </form>
+        </div>
+        <?php
+    }
+
+    private function render_stats_tab(): void {
+        $stats  = Payamito_Logger::get_stats();
+        $daily  = $stats['daily'];
+        $max    = max(1, max(array_map(fn($d) => $d['sent'] + $d['failed'], $daily)));
+        $rate   = $stats['success_rate'];
+        $rate_color = $rate >= 80 ? '#2ea44f' : ($rate >= 50 ? '#e36209' : '#cf222e');
+        ?>
+        <div style="margin-top:24px;">
+
+            <?php /* ── کارت‌های خلاصه ── */ ?>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:28px;">
+                <?php
+                $cards = [
+                    ['label' => 'کل ارسال‌ها',   'value' => number_format($stats['total']),              'color' => '#0969da'],
+                    ['label' => 'موفق',            'value' => number_format($stats['by_status']['sent']),  'color' => '#2ea44f'],
+                    ['label' => 'ناموفق',          'value' => number_format($stats['by_status']['failed']),'color' => '#cf222e'],
+                    ['label' => 'نرخ موفقیت',      'value' => $rate . '%',                                'color' => $rate_color],
+                ];
+                foreach ($cards as $card) : ?>
+                    <div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:20px 28px;min-width:140px;text-align:center;">
+                        <div style="font-size:28px;font-weight:700;color:<?php echo $card['color']; ?>">
+                            <?php echo esc_html($card['value']); ?>
+                        </div>
+                        <div style="color:#666;margin-top:4px;font-size:13px;"><?php echo esc_html($card['label']); ?></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php /* ── نمودار ۳۰ روز اخیر ── */ ?>
+            <div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:20px;margin-bottom:28px;">
+                <h3 style="margin:0 0 16px;">ارسال‌های ۳۰ روز اخیر</h3>
+                <div style="display:flex;align-items:flex-end;height:120px;gap:3px;border-bottom:1px solid #eee;padding-bottom:4px;">
+                    <?php foreach ($daily as $d) :
+                        $h_sent   = $max > 0 ? round($d['sent']   / $max * 110) : 0;
+                        $h_failed = $max > 0 ? round($d['failed'] / $max * 110) : 0;
+                        $title    = esc_attr($d['day'] . " | موفق: {$d['sent']} | ناموفق: {$d['failed']}");
+                    ?>
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:1px;" title="<?php echo $title; ?>">
+                            <?php if ($h_failed > 0) : ?>
+                                <div style="width:100%;height:<?php echo $h_failed; ?>px;background:#cf222e;border-radius:2px 2px 0 0;"></div>
+                            <?php endif; ?>
+                            <?php if ($h_sent > 0) : ?>
+                                <div style="width:100%;height:<?php echo $h_sent; ?>px;background:#2ea44f;border-radius:2px 2px 0 0;"></div>
+                            <?php endif; ?>
+                            <?php if ($h_sent === 0 && $h_failed === 0) : ?>
+                                <div style="width:100%;height:2px;background:#eee;"></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#999;margin-top:4px;">
+                    <span><?php echo esc_html($daily[0]['day']); ?></span>
+                    <span style="display:flex;gap:12px;">
+                        <span><span style="color:#2ea44f">■</span> موفق</span>
+                        <span><span style="color:#cf222e">■</span> ناموفق</span>
+                    </span>
+                    <span><?php echo esc_html($daily[29]['day']); ?></span>
+                </div>
+            </div>
+
+            <?php /* ── پرکاربردترین پترن‌ها ── */ ?>
+            <?php if (!empty($stats['top_patterns'])) : ?>
+            <div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:20px;">
+                <h3 style="margin:0 0 16px;">پرکاربردترین پترن‌ها</h3>
+                <table class="widefat striped" style="width:auto;min-width:400px;">
+                    <thead>
+                        <tr>
+                            <th>کد پترن</th>
+                            <th>کل ارسال</th>
+                            <th>موفق</th>
+                            <th>نرخ موفقیت</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($stats['top_patterns'] as $p) :
+                            $p_rate = $p['total'] > 0 ? round($p['sent_count'] / $p['total'] * 100) : 0;
+                        ?>
+                            <tr>
+                                <td><code><?php echo esc_html($p['pattern']); ?></code></td>
+                                <td><?php echo (int) $p['total']; ?></td>
+                                <td><?php echo (int) $p['sent_count']; ?></td>
+                                <td><?php echo $p_rate; ?>%</td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+
+            <p style="color:#999;font-size:12px;margin-top:12px;">
+                آمار هر یک ساعت یک‌بار به‌روز می‌شود.
+            </p>
         </div>
         <?php
     }

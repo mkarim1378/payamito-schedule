@@ -53,7 +53,11 @@ class Payamito_Logger {
             ['%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s']
         );
 
-        return $ok ? $wpdb->insert_id : false;
+        if ($ok) {
+            delete_transient('payamito_stats_cache');
+            return $wpdb->insert_id;
+        }
+        return false;
     }
 
     public static function get_rows(array $args = []): array {
@@ -95,6 +99,65 @@ class Payamito_Logger {
         return (int) ($values
             ? $wpdb->get_var($wpdb->prepare($sql, $values))
             : $wpdb->get_var($sql));
+    }
+
+    public static function get_stats(): array {
+        $cached = get_transient('payamito_stats_cache');
+        if ($cached !== false) return $cached;
+
+        global $wpdb;
+        $table = self::table();
+
+        // totals by status
+        $rows      = $wpdb->get_results("SELECT status, COUNT(*) AS cnt FROM $table GROUP BY status", ARRAY_A) ?: [];
+        $by_status = ['sent' => 0, 'failed' => 0, 'cancelled' => 0];
+        foreach ($rows as $r) {
+            if (isset($by_status[$r['status']])) $by_status[$r['status']] = (int) $r['cnt'];
+        }
+        $total        = array_sum($by_status);
+        $success_rate = $total > 0 ? round($by_status['sent'] / $total * 100, 1) : 0;
+
+        // daily breakdown — last 30 days
+        $daily_rows = $wpdb->get_results(
+            "SELECT DATE(scheduled_at) AS day, status, COUNT(*) AS cnt
+             FROM $table
+             WHERE scheduled_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+             GROUP BY DATE(scheduled_at), status
+             ORDER BY day ASC",
+            ARRAY_A
+        ) ?: [];
+
+        $daily_map = [];
+        foreach ($daily_rows as $r) {
+            $daily_map[$r['day']][$r['status']] = (int) $r['cnt'];
+        }
+
+        $daily = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $day     = date('Y-m-d', strtotime("-{$i} days"));
+            $daily[] = [
+                'day'       => $day,
+                'sent'      => $daily_map[$day]['sent']      ?? 0,
+                'failed'    => $daily_map[$day]['failed']    ?? 0,
+                'cancelled' => $daily_map[$day]['cancelled'] ?? 0,
+            ];
+        }
+
+        // top 5 patterns
+        $top_patterns = $wpdb->get_results(
+            "SELECT pattern,
+                    COUNT(*) AS total,
+                    SUM(status = 'sent') AS sent_count
+             FROM $table
+             GROUP BY pattern
+             ORDER BY total DESC
+             LIMIT 5",
+            ARRAY_A
+        ) ?: [];
+
+        $stats = compact('by_status', 'total', 'success_rate', 'daily', 'top_patterns');
+        set_transient('payamito_stats_cache', $stats, HOUR_IN_SECONDS);
+        return $stats;
     }
 
     public static function purge_old(int $days = 90): int {
