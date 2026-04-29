@@ -159,7 +159,7 @@ class Payamito_Admin {
         wp_enqueue_script(
             'payamito-admin',
             PAYAMITO_SCHEDULE_URL . 'assets/js/admin.js',
-            ['jquery'],
+            [],
             PAYAMITO_SCHEDULE_VERSION,
             true
         );
@@ -167,6 +167,7 @@ class Payamito_Admin {
         wp_localize_script('payamito-admin', 'payamitoData', [
             'statuses'      => wc_get_order_statuses(),
             'confirmDelete' => 'آیا مطمئن هستید؟',
+            'activeTab'     => sanitize_key($_GET['tab'] ?? 'settings'),
         ]);
     }
 
@@ -179,30 +180,29 @@ class Payamito_Admin {
 
         settings_errors('payamito_msg');
 
-        $tab      = sanitize_key($_GET['tab'] ?? 'settings');
-        $base_url = admin_url('admin.php?page=payamito-scheduler');
+        $active = sanitize_key($_GET['tab'] ?? 'settings');
+        $tabs   = [
+            'settings' => '⚙️ تنظیمات',
+            'log'      => '📋 تاریخچه ارسال',
+            'stats'    => '📊 آمار',
+        ];
         ?>
         <div class="wrap">
             <h1>زمان‌بندی پیامک (پیامیتو)</h1>
+
             <nav class="nav-tab-wrapper" style="margin-bottom:0;">
-                <a href="<?php echo esc_url($base_url); ?>"
-                   class="nav-tab <?php echo $tab === 'settings' ? 'nav-tab-active' : ''; ?>">
-                    ⚙️ تنظیمات
-                </a>
-                <a href="<?php echo esc_url(add_query_arg('tab', 'log', $base_url)); ?>"
-                   class="nav-tab <?php echo $tab === 'log' ? 'nav-tab-active' : ''; ?>">
-                    📋 تاریخچه ارسال
-                </a>
-                <a href="<?php echo esc_url(add_query_arg('tab', 'stats', $base_url)); ?>"
-                   class="nav-tab <?php echo $tab === 'stats' ? 'nav-tab-active' : ''; ?>">
-                    📊 آمار
-                </a>
+                <?php foreach ($tabs as $key => $label) : ?>
+                    <a href="#"
+                       class="nav-tab payamito-tab-btn <?php echo $active === $key ? 'nav-tab-active' : ''; ?>"
+                       data-tab="<?php echo esc_attr($key); ?>">
+                        <?php echo esc_html($label); ?>
+                    </a>
+                <?php endforeach; ?>
             </nav>
-            <?php if ($tab === 'log') : ?>
-                <?php $this->render_log_tab(); ?>
-            <?php elseif ($tab === 'stats') : ?>
-                <?php $this->render_stats_tab(); ?>
-            <?php else : ?>
+
+            <div id="payamito-tab-settings"
+                 class="payamito-tab-panel"
+                 <?php echo $active !== 'settings' ? 'style="display:none;"' : ''; ?>>
                 <?php
                 $rules       = get_option('payamito_schedule_rules', []);
                 $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'log_retention_days' => 90]);
@@ -211,7 +211,19 @@ class Payamito_Admin {
                 $this->render_test_section();
                 $this->render_rules_section($rules, $statuses);
                 ?>
-            <?php endif; ?>
+            </div>
+
+            <div id="payamito-tab-log"
+                 class="payamito-tab-panel"
+                 <?php echo $active !== 'log' ? 'style="display:none;"' : ''; ?>>
+                <?php $this->render_log_tab(); ?>
+            </div>
+
+            <div id="payamito-tab-stats"
+                 class="payamito-tab-panel"
+                 <?php echo $active !== 'stats' ? 'style="display:none;"' : ''; ?>>
+                <?php $this->render_stats_tab(); ?>
+            </div>
         </div>
         <?php
     }
