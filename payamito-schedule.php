@@ -2,7 +2,7 @@
 /**
  * Plugin Name: زمان‌بندی پیامک پیامیتو
  * Description: افزونه جانبی برای ارسال زمان‌بندی شده پیامک‌های ووکامرس با پترن (خط خدماتی).
- * Version: 2.6.0
+ * Version: 2.7.0
  * Author: آکادمی کارنو
  * Author-URI: https://sepehralimohammadi.com
  * Requires Plugins: woocommerce
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('PAYAMITO_SCHEDULE_VERSION', '2.6.0');
+define('PAYAMITO_SCHEDULE_VERSION', '2.7.0');
 define('PAYAMITO_SCHEDULE_DIR',     plugin_dir_path(__FILE__));
 define('PAYAMITO_SCHEDULE_URL',     plugin_dir_url(__FILE__));
 
@@ -26,23 +26,13 @@ require_once PAYAMITO_SCHEDULE_DIR . 'includes/class-admin.php';
 
 register_activation_hook(__FILE__, function () {
     Payamito_Logger::create_table();
-    if (!wp_next_scheduled('payamito_weekly_log_cleanup')) {
-        wp_schedule_event(time(), 'weekly', 'payamito_weekly_log_cleanup');
+    if (!as_has_scheduled_action('payamito_weekly_log_cleanup', [], 'payamito-sms')) {
+        as_schedule_recurring_action(time(), WEEK_IN_SECONDS, 'payamito_weekly_log_cleanup', [], 'payamito-sms');
     }
 });
 
 register_deactivation_hook(__FILE__, function () {
-    wp_clear_scheduled_hook('payamito_weekly_log_cleanup');
-});
-
-add_filter('cron_schedules', function ($schedules) {
-    if (!isset($schedules['weekly'])) {
-        $schedules['weekly'] = [
-            'interval' => WEEK_IN_SECONDS,
-            'display'  => 'Once Weekly',
-        ];
-    }
-    return $schedules;
+    as_unschedule_all_actions('payamito_weekly_log_cleanup', [], 'payamito-sms');
 });
 
 add_action('payamito_weekly_log_cleanup', function () {

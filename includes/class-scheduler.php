@@ -11,6 +11,8 @@ class Payamito_Scheduler {
 
     private const MAX_ATTEMPTS = 4;
 
+    private const AS_GROUP = 'payamito-sms';
+
     public function __construct() {
         add_action('woocommerce_order_status_changed', [$this, 'on_status_change'], 10, 4);
         add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],          10, 5);
@@ -26,17 +28,22 @@ class Payamito_Scheduler {
             $delay  = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);
             $run_at = time() + $delay;
 
-            $hook_args = [$order_id, $rule['pattern'], $rule['vars'], date('Y-m-d H:i:s', $run_at), 1];
+            $hook_args = [
+                'order_id'     => $order_id,
+                'pattern_code' => $rule['pattern'],
+                'vars_str'     => $rule['vars'],
+                'scheduled_at' => date('Y-m-d H:i:s', $run_at),
+                'attempt'      => 1,
+            ];
 
-            if (wp_next_scheduled('payamito_execute_scheduled_sms', $hook_args)) {
+            if (as_has_scheduled_action('payamito_execute_scheduled_sms', $hook_args, self::AS_GROUP)) {
                 continue;
             }
 
-            wp_schedule_single_event($run_at, 'payamito_execute_scheduled_sms', $hook_args);
+            as_schedule_single_action($run_at, 'payamito_execute_scheduled_sms', $hook_args, self::AS_GROUP);
         }
     }
 
-    // $scheduled_at is nullable for backward-compat with already-queued cron jobs (3-arg signature)
     public function execute(int $order_id, string $pattern_code, string $vars_str, ?string $scheduled_at = null, int $attempt = 1): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
@@ -81,12 +88,15 @@ class Payamito_Scheduler {
         }
 
         if ($attempt < self::MAX_ATTEMPTS) {
-            $delay = self::RETRY_DELAYS[$attempt];
-            wp_schedule_single_event(
-                time() + $delay,
-                'payamito_execute_scheduled_sms',
-                [$order_id, $pattern_code, $vars_str, $scheduled_at, $attempt + 1]
-            );
+            $delay         = self::RETRY_DELAYS[$attempt];
+            $retry_hook_args = [
+                'order_id'     => $order_id,
+                'pattern_code' => $pattern_code,
+                'vars_str'     => $vars_str,
+                'scheduled_at' => $scheduled_at,
+                'attempt'      => $attempt + 1,
+            ];
+            as_schedule_single_action(time() + $delay, 'payamito_execute_scheduled_sms', $retry_hook_args, self::AS_GROUP);
             $order->add_order_note(
                 sprintf(
                     '[پیامیتو] خطا در ارسال پترن %s به %s — تلاش %d از %d. ارسال مجدد در %s.',

@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.7.0] - 2026-04-29
+
+### Changed
+- جایگزینی کامل WP-Cron با Action Scheduler برای زمان‌بندی پیامک‌ها و retry
+- `wp_schedule_single_event` → `as_schedule_single_action` با گروه `payamito-sms`
+- `wp_next_scheduled` → `as_has_scheduled_action` برای جلوگیری از ارسال تکراری
+- پاکسازی هفتگی لاگ با `as_schedule_recurring_action` مدیریت می‌شود
+- فیلتر `cron_schedules` برای تعریف بازه `weekly` حذف شد
+- actionهای زمان‌بندی‌شده در `WooCommerce > Status > Scheduled Actions` قابل مشاهده و دیباگ هستند
+
+---
+
 ## [2.6.0] - 2026-04-29
 
 ### Added
