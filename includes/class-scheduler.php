@@ -59,6 +59,27 @@ class Payamito_Scheduler {
             'scheduled_at' => $scheduled_at ?? $now,
             'sent_at'      => $success ? $now : null,
         ]);
+
+        $masked = $this->mask_phone($phone);
+        if ($success) {
+            $response_str = is_object($result) ? print_r($result, true) : (string) $result;
+            $order->add_order_note(
+                sprintf('[پیامیتو] پیامک پترن %s به شماره %s ارسال شد. (پاسخ: %s)', $pattern_code, $masked, $response_str),
+                false,
+                false
+            );
+        } else {
+            $order->add_order_note(
+                sprintf('[پیامیتو] خطا در ارسال پیامک پترن %s به شماره %s.', $pattern_code, $masked),
+                false,
+                false
+            );
+        }
+    }
+
+    private function mask_phone(string $phone): string {
+        if (strlen($phone) < 7) return $phone;
+        return substr($phone, 0, 4) . '****' . substr($phone, -3);
     }
 
     private function resolve_vars(string $vars_str, WC_Abstract_Order $order): array {
