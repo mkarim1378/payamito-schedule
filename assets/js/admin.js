@@ -65,25 +65,7 @@ function validateRules(form) {
     return valid;
 }
 
-function switchTab(tab) {
-    document.querySelectorAll('.payamito-tab-btn').forEach(function (btn) {
-        btn.classList.toggle('nav-tab-active', btn.dataset.tab === tab);
-    });
-
-    document.querySelectorAll('.payamito-tab-panel').forEach(function (panel) {
-        panel.style.display = panel.id === 'payamito-tab-' + tab ? '' : 'none';
-    });
-
-    if (window.history && window.history.replaceState) {
-        var url = new URL(window.location.href);
-        url.searchParams.set('tab', tab);
-        window.history.replaceState(null, '', url.toString());
-    }
-}
-
 document.addEventListener('DOMContentLoaded', function () {
-
-    // ── قوانین زمان‌بندی ─────────────────────────────────────────────────────
 
     var addBtn = document.getElementById('add-rule');
     if (addBtn) {
@@ -107,13 +89,4 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!validateRules(this)) e.preventDefault();
         });
     }
-
-    // ── Tab switching ─────────────────────────────────────────────────────────
-
-    document.querySelectorAll('.payamito-tab-btn').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            switchTab(this.dataset.tab);
-        });
-    });
 });

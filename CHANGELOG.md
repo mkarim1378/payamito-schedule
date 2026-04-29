@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.5.0] - 2026-04-29
+
+### Changed
+- تب‌های پنل ادمین (تنظیمات، تاریخچه ارسال، آمار) به صفحات مجزا با زیرمنوی sidebar وردپرس تبدیل شدند
+- آدرس صفحه تاریخچه: `admin.php?page=payamito-scheduler-log`
+- آدرس صفحه آمار: `admin.php?page=payamito-scheduler-stats`
+- کد tab switching از `admin.js` حذف شد
+
+---
+
 ## [2.4.0] - 2026-04-29
 
 ### Added

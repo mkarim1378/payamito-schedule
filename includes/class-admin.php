@@ -3,6 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 class Payamito_Admin {
 
+    private array $page_hooks = [];
+
     public function __construct() {
         add_action('admin_menu',                        [$this, 'add_menu']);
         add_action('admin_init',                        [$this, 'handle_submission']);
@@ -142,19 +144,46 @@ class Payamito_Admin {
     }
 
     public function add_menu(): void {
-        add_menu_page(
+        $this->page_hooks[] = add_menu_page(
             'زمان‌بندی پیامک',
             'زمان‌بندی پیامک',
             'manage_options',
             'payamito-scheduler',
-            [$this, 'render_page'],
+            [$this, 'render_settings_page'],
             'dashicons-clock',
             50
+        );
+
+        add_submenu_page(
+            'payamito-scheduler',
+            'تنظیمات — زمان‌بندی پیامک',
+            '⚙️ تنظیمات',
+            'manage_options',
+            'payamito-scheduler',
+            [$this, 'render_settings_page']
+        );
+
+        add_submenu_page(
+            'payamito-scheduler',
+            'تاریخچه ارسال — زمان‌بندی پیامک',
+            '📋 تاریخچه ارسال',
+            'manage_options',
+            'payamito-scheduler-log',
+            [$this, 'render_log_page']
+        );
+
+        add_submenu_page(
+            'payamito-scheduler',
+            'آمار — زمان‌بندی پیامک',
+            '📊 آمار',
+            'manage_options',
+            'payamito-scheduler-stats',
+            [$this, 'render_stats_page']
         );
     }
 
     public function enqueue_scripts(string $hook): void {
-        if ($hook !== 'toplevel_page_payamito-scheduler') return;
+        if (!in_array($hook, $this->page_hooks, true)) return;
 
         wp_enqueue_script(
             'payamito-admin',
@@ -167,7 +196,6 @@ class Payamito_Admin {
         wp_localize_script('payamito-admin', 'payamitoData', [
             'statuses'      => wc_get_order_statuses(),
             'confirmDelete' => 'آیا مطمئن هستید؟',
-            'activeTab'     => sanitize_key($_GET['tab'] ?? 'settings'),
         ]);
     }
 
@@ -175,55 +203,42 @@ class Payamito_Admin {
     // Page Rendering
     // -------------------------------------------------------------------------
 
-    public function render_page(): void {
+    public function render_settings_page(): void {
         if (!current_user_can('manage_options')) return;
 
         settings_errors('payamito_msg');
 
-        $active = sanitize_key($_GET['tab'] ?? 'settings');
-        $tabs   = [
-            'settings' => '⚙️ تنظیمات',
-            'log'      => '📋 تاریخچه ارسال',
-            'stats'    => '📊 آمار',
-        ];
+        $rules       = get_option('payamito_schedule_rules', []);
+        $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'log_retention_days' => 90]);
+        $statuses    = wc_get_order_statuses();
         ?>
         <div class="wrap">
             <h1>زمان‌بندی پیامک (پیامیتو)</h1>
+            <?php
+            $this->render_credentials_section($credentials);
+            $this->render_test_section();
+            $this->render_rules_section($rules, $statuses);
+            ?>
+        </div>
+        <?php
+    }
 
-            <nav class="nav-tab-wrapper" style="margin-bottom:0;">
-                <?php foreach ($tabs as $key => $label) : ?>
-                    <a href="#"
-                       class="nav-tab payamito-tab-btn <?php echo $active === $key ? 'nav-tab-active' : ''; ?>"
-                       data-tab="<?php echo esc_attr($key); ?>">
-                        <?php echo esc_html($label); ?>
-                    </a>
-                <?php endforeach; ?>
-            </nav>
+    public function render_log_page(): void {
+        if (!current_user_can('manage_options')) return;
+        ?>
+        <div class="wrap">
+            <h1>تاریخچه ارسال پیامک</h1>
+            <?php $this->render_log_tab(); ?>
+        </div>
+        <?php
+    }
 
-            <div id="payamito-tab-settings"
-                 class="payamito-tab-panel"
-                 <?php echo $active !== 'settings' ? 'style="display:none;"' : ''; ?>>
-                <?php
-                $rules       = get_option('payamito_schedule_rules', []);
-                $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'log_retention_days' => 90]);
-                $statuses    = wc_get_order_statuses();
-                $this->render_credentials_section($credentials);
-                $this->render_test_section();
-                $this->render_rules_section($rules, $statuses);
-                ?>
-            </div>
-
-            <div id="payamito-tab-log"
-                 class="payamito-tab-panel"
-                 <?php echo $active !== 'log' ? 'style="display:none;"' : ''; ?>>
-                <?php $this->render_log_tab(); ?>
-            </div>
-
-            <div id="payamito-tab-stats"
-                 class="payamito-tab-panel"
-                 <?php echo $active !== 'stats' ? 'style="display:none;"' : ''; ?>>
-                <?php $this->render_stats_tab(); ?>
-            </div>
+    public function render_stats_page(): void {
+        if (!current_user_can('manage_options')) return;
+        ?>
+        <div class="wrap">
+            <h1>آمار ارسال پیامک</h1>
+            <?php $this->render_stats_tab(); ?>
         </div>
         <?php
     }
@@ -235,8 +250,7 @@ class Payamito_Admin {
         <div style="margin-top:20px;">
             <?php $table->views(); ?>
             <form method="get">
-                <input type="hidden" name="page" value="payamito-scheduler">
-                <input type="hidden" name="tab"  value="log">
+                <input type="hidden" name="page" value="payamito-scheduler-log">
                 <?php if (!empty($_GET['status_filter'])) : ?>
                     <input type="hidden" name="status_filter" value="<?php echo esc_attr($_GET['status_filter']); ?>">
                 <?php endif; ?>
