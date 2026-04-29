@@ -30,7 +30,7 @@ class Payamito_Log_List_Table extends WP_List_Table {
 
     protected function get_views(): array {
         $current  = sanitize_key($_GET['status_filter'] ?? '');
-        $base_url = admin_url('admin.php?page=payamito-scheduler&tab=log');
+        $base_url = admin_url('admin.php?page=payamito-scheduler-log');
 
         $statuses = [
             ''          => 'همه',

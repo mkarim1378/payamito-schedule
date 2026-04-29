@@ -3,9 +3,17 @@ if (!defined('ABSPATH')) exit;
 
 class Payamito_Scheduler {
 
+    private const RETRY_DELAYS = [
+        1 => 5  * MINUTE_IN_SECONDS,
+        2 => 30 * MINUTE_IN_SECONDS,
+        3 => 2  * HOUR_IN_SECONDS,
+    ];
+
+    private const MAX_ATTEMPTS = 4;
+
     public function __construct() {
         add_action('woocommerce_order_status_changed', [$this, 'on_status_change'], 10, 4);
-        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],          10, 4);
+        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],          10, 5);
     }
 
     public function on_status_change(int $order_id, string $from_status, string $to_status, $order): void {
@@ -18,7 +26,7 @@ class Payamito_Scheduler {
             $delay  = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);
             $run_at = time() + $delay;
 
-            $hook_args = [$order_id, $rule['pattern'], $rule['vars'], date('Y-m-d H:i:s', $run_at)];
+            $hook_args = [$order_id, $rule['pattern'], $rule['vars'], date('Y-m-d H:i:s', $run_at), 1];
 
             if (wp_next_scheduled('payamito_execute_scheduled_sms', $hook_args)) {
                 continue;
@@ -29,7 +37,7 @@ class Payamito_Scheduler {
     }
 
     // $scheduled_at is nullable for backward-compat with already-queued cron jobs (3-arg signature)
-    public function execute(int $order_id, string $pattern_code, string $vars_str, ?string $scheduled_at = null): void {
+    public function execute(int $order_id, string $pattern_code, string $vars_str, ?string $scheduled_at = null, int $attempt = 1): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
 
@@ -46,6 +54,7 @@ class Payamito_Scheduler {
         $result   = $api->send_pattern_sms($phone, $pattern_code, $sms_args);
         $now      = current_time('mysql');
         $success  = $result !== null;
+        $masked   = $this->mask_phone($phone);
 
         Payamito_Logger::insert([
             'order_id'     => $order_id,
@@ -56,11 +65,11 @@ class Payamito_Scheduler {
             'response'     => $success
                 ? (is_object($result) ? print_r($result, true) : (string) $result)
                 : null,
+            'attempt'      => $attempt,
             'scheduled_at' => $scheduled_at ?? $now,
             'sent_at'      => $success ? $now : null,
         ]);
 
-        $masked = $this->mask_phone($phone);
         if ($success) {
             $response_str = is_object($result) ? print_r($result, true) : (string) $result;
             $order->add_order_note(
@@ -68,13 +77,45 @@ class Payamito_Scheduler {
                 false,
                 false
             );
+            return;
+        }
+
+        if ($attempt < self::MAX_ATTEMPTS) {
+            $delay = self::RETRY_DELAYS[$attempt];
+            wp_schedule_single_event(
+                time() + $delay,
+                'payamito_execute_scheduled_sms',
+                [$order_id, $pattern_code, $vars_str, $scheduled_at, $attempt + 1]
+            );
+            $order->add_order_note(
+                sprintf(
+                    '[پیامیتو] خطا در ارسال پترن %s به %s — تلاش %d از %d. ارسال مجدد در %s.',
+                    $pattern_code,
+                    $masked,
+                    $attempt,
+                    self::MAX_ATTEMPTS,
+                    $this->format_delay($delay)
+                ),
+                false,
+                false
+            );
         } else {
             $order->add_order_note(
-                sprintf('[پیامیتو] خطا در ارسال پیامک پترن %s به شماره %s.', $pattern_code, $masked),
+                sprintf(
+                    '[پیامیتو] خطا در ارسال پترن %s به %s — همه %d تلاش ناموفق بود.',
+                    $pattern_code,
+                    $masked,
+                    self::MAX_ATTEMPTS
+                ),
                 false,
                 false
             );
         }
+    }
+
+    private function format_delay(int $seconds): string {
+        if ($seconds < HOUR_IN_SECONDS) return (int) ($seconds / 60) . ' دقیقه';
+        return (int) ($seconds / HOUR_IN_SECONDS) . ' ساعت';
     }
 
     private function mask_phone(string $phone): string {
