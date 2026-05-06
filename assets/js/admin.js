@@ -19,16 +19,39 @@ function buildRuleRow(index) {
                 <option value="days">روز</option>
             </select>
             <hr style="margin:10px 0;border:0;border-top:1px solid #eee;">
-            <strong>کد پترن:</strong>
-            <input type="text" name="rules[${index}][pattern]" placeholder="کد پترن" style="width:100px;">
-            <div style="margin-top:10px;">
-                <strong>مقادیر متغیرها:</strong><br>
-                <textarea name="rules[${index}][vars]" style="width:100%;height:50px;"
-                    placeholder="name:{billing_first_name};order:{order_id}"></textarea>
+            <strong>نوع ارسال:</strong>
+            <select name="rules[${index}][send_type]" class="send-type-select">
+                <option value="pattern">پترن (خط خدماتی)</option>
+                <option value="text">متن ثابت (SmartSMS)</option>
+            </select>
+            <div class="pattern-fields" style="margin-top:10px;">
+                <strong>کد پترن:</strong>
+                <input type="text" name="rules[${index}][pattern]" placeholder="کد پترن" style="width:100px;">
+                <div style="margin-top:10px;">
+                    <strong>مقادیر متغیرها:</strong><br>
+                    <textarea name="rules[${index}][vars]" style="width:100%;height:50px;"
+                        placeholder="name:{billing_first_name};order:{order_id}"></textarea>
+                </div>
+            </div>
+            <div class="text-fields" style="margin-top:10px;display:none;">
+                <strong>متن پیامک:</strong><br>
+                <textarea name="rules[${index}][text_body]" style="width:100%;height:80px;"
+                    placeholder="سفارش شما #{order_id} ثبت شد. با تشکر، {billing_first_name} عزیز."></textarea>
+                <p class="description">
+                    شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
+                    <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>
+                </p>
             </div>
             <button type="button" class="button remove-row"
-                style="color:#a00;border-color:#a00;margin-top:5px;">حذف این قانون</button>
+                style="color:#a00;border-color:#a00;margin-top:10px;">حذف این قانون</button>
         </div>`;
+}
+
+function toggleSendTypeFields(select) {
+    var row       = select.closest('.rule-row');
+    var isText    = select.value === 'text';
+    row.querySelector('.pattern-fields').style.display = isText ? 'none' : '';
+    row.querySelector('.text-fields').style.display    = isText ? '' : 'none';
 }
 
 function validateRules(form) {
@@ -36,6 +59,21 @@ function validateRules(form) {
 
     form.querySelectorAll('#rules-container .rule-row').forEach(function (row, index) {
         if (!valid) return;
+
+        var sendType  = row.querySelector('select[name*="[send_type]"]').value;
+
+        if (sendType === 'text') {
+            var textField = row.querySelector('textarea[name*="[text_body]"]');
+            if (!textField.value.trim()) {
+                alert('خطا در قانون شماره ' + (index + 1) + ':\nمتن پیامک نمی‌تواند خالی باشد.');
+                textField.style.border = '2px solid red';
+                textField.focus();
+                valid = false;
+            } else {
+                textField.style.border = '';
+            }
+            return;
+        }
 
         var pattern   = row.querySelector('input[name*="[pattern]"]').value.trim();
         var varsField = row.querySelector('textarea[name*="[vars]"]');
@@ -67,6 +105,9 @@ function validateRules(form) {
 
 document.addEventListener('DOMContentLoaded', function () {
 
+    // init toggles for existing saved rows
+    document.querySelectorAll('#rules-container .send-type-select').forEach(toggleSendTypeFields);
+
     var addBtn = document.getElementById('add-rule');
     if (addBtn) {
         addBtn.addEventListener('click', function () {
@@ -74,6 +115,12 @@ document.addEventListener('DOMContentLoaded', function () {
             container.insertAdjacentHTML('beforeend', buildRuleRow(Date.now()));
         });
     }
+
+    document.addEventListener('change', function (e) {
+        if (e.target.classList.contains('send-type-select')) {
+            toggleSendTypeFields(e.target);
+        }
+    });
 
     document.addEventListener('click', function (e) {
         if (e.target.classList.contains('remove-row')) {

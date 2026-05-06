@@ -54,10 +54,15 @@ class Payamito_Admin {
             $masked = strlen($entry['mobile']) > 6
                 ? substr($entry['mobile'], 0, 4) . '****' . substr($entry['mobile'], -3)
                 : $entry['mobile'];
+            $is_text = $entry['pattern'] === 'text';
             ?>
             <div style="border:1px solid #ddd;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;">
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                    <strong>پترن: <?php echo esc_html($entry['pattern']); ?></strong>
+                    <?php if ($is_text) : ?>
+                        <strong>متن ثابت: <span style="font-weight:normal"><?php echo esc_html(mb_strimwidth($entry['vars'], 0, 30, '...')); ?></span></strong>
+                    <?php else : ?>
+                        <strong>پترن: <?php echo esc_html($entry['pattern']); ?></strong>
+                    <?php endif; ?>
                     <?php echo $status_map[$entry['status']] ?? esc_html($entry['status']); ?>
                 </div>
                 <div style="color:#666;">📱 <?php echo esc_html($masked); ?></div>
@@ -125,24 +130,41 @@ class Payamito_Admin {
 
         $credentials = get_option('payamito_credentials', []);
         $api         = new Payamito_Api($credentials['username'] ?? '', $credentials['password'] ?? '');
-        $result      = $api->send_pattern_sms($mobile, $entry['pattern'], $sms_args);
-        $success     = $result !== null;
         $now         = current_time('mysql');
+        $is_text     = $entry['pattern'] === 'text';
+
+        if ($is_text) {
+            $placeholders = [
+                '{billing_first_name}' => $order->get_billing_first_name(),
+                '{billing_last_name}'  => $order->get_billing_last_name(),
+                '{order_id}'           => (string) $order->get_id(),
+                '{order_total}'        => (string) $order->get_total(),
+                '{billing_phone}'      => $order->get_billing_phone(),
+            ];
+            $resolved_text = str_replace(array_keys($placeholders), array_values($placeholders), $entry['vars']);
+            $from          = $credentials['from_number'] ?? '';
+            $result        = $api->send_smart_sms($mobile, $resolved_text, $from);
+        } else {
+            $result = $api->send_pattern_sms($mobile, $entry['pattern'], $sms_args);
+        }
+
+        $success = $result !== null;
 
         Payamito_Logger::update_status(
             $log_id,
             $success ? 'sent' : 'failed',
-            $success ? (is_object($result) ? print_r($result, true) : (string) $result) : null,
+            $success ? (is_array($result) ? wp_json_encode($result) : (is_object($result) ? print_r($result, true) : (string) $result)) : null,
             $success ? $now : null
         );
 
         $masked = strlen($mobile) > 6
             ? substr($mobile, 0, 4) . '****' . substr($mobile, -3)
             : $mobile;
+        $label  = $is_text ? 'متن ثابت' : ('پترن ' . $entry['pattern']);
         $order->add_order_note(
             $success
-                ? sprintf('[پیامیتو] ارسال مجدد پترن %s به %s موفق بود.', $entry['pattern'], $masked)
-                : sprintf('[پیامیتو] ارسال مجدد پترن %s به %s ناموفق بود.', $entry['pattern'], $masked),
+                ? sprintf('[پیامیتو] ارسال مجدد %s به %s موفق بود.', $label, $masked)
+                : sprintf('[پیامیتو] ارسال مجدد %s به %s ناموفق بود.', $label, $masked),
             false, false
         );
 
@@ -216,7 +238,7 @@ class Payamito_Admin {
         settings_errors('payamito_msg');
 
         $rules       = get_option('payamito_schedule_rules', []);
-        $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'log_retention_days' => 90]);
+        $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'from_number' => '', 'log_retention_days' => 90]);
         $statuses    = wc_get_order_statuses();
         ?>
         <div class="wrap">
@@ -379,6 +401,13 @@ class Payamito_Admin {
                         <td><input type="password" name="credentials[password]" class="regular-text" autocomplete="current-password" value="<?php echo esc_attr($credentials['password']); ?>"></td>
                     </tr>
                     <tr>
+                        <th><label>شماره فرستنده (خط اختصاصی):</label></th>
+                        <td>
+                            <input type="text" name="credentials[from_number]" class="regular-text" placeholder="مثال: 10008000" value="<?php echo esc_attr($credentials['from_number'] ?? ''); ?>">
+                            <p class="description">برای ارسال پیامک با متن ثابت (SmartSMS) استفاده می‌شود.</p>
+                        </td>
+                    </tr>
+                    <tr>
                         <th><label>نگهداری لاگ (روز):</label></th>
                         <td>
                             <input type="number" name="credentials[log_retention_days]" min="1" style="width:80px;"
@@ -448,6 +477,7 @@ class Payamito_Admin {
     }
 
     private function render_rule_row(int $index, array $rule, array $statuses): void {
+        $send_type = $rule['send_type'] ?? 'pattern';
         ?>
         <div class="rule-row" style="border:1px solid #ccc;padding:15px;margin-bottom:10px;background:#fff;">
             <strong>اگر سفارش:</strong>
@@ -466,18 +496,33 @@ class Payamito_Admin {
                 <option value="days"    <?php selected($rule['delay_unit'] ?? '', 'days'); ?>>روز</option>
             </select>
             <hr style="margin:10px 0;border:0;border-top:1px solid #eee;">
-            <strong>کد پترن:</strong>
-            <input type="text" name="rules[<?php echo $index; ?>][pattern]" value="<?php echo esc_attr($rule['pattern'] ?? ''); ?>" placeholder="کد پترن" style="width:100px;">
-            <div style="margin-top:10px;">
-                <strong>مقادیر متغیرها (به ترتیب):</strong><br>
-                <textarea name="rules[<?php echo $index; ?>][vars]" style="width:100%;height:50px;" placeholder="name:{billing_first_name};order:{order_id}"><?php echo esc_textarea($rule['vars'] ?? ''); ?></textarea>
+            <strong>نوع ارسال:</strong>
+            <select name="rules[<?php echo $index; ?>][send_type]" class="send-type-select">
+                <option value="pattern" <?php selected($send_type, 'pattern'); ?>>پترن (خط خدماتی)</option>
+                <option value="text"    <?php selected($send_type, 'text'); ?>>متن ثابت (SmartSMS)</option>
+            </select>
+            <div class="pattern-fields" style="margin-top:10px;<?php echo $send_type === 'text' ? 'display:none;' : ''; ?>">
+                <strong>کد پترن:</strong>
+                <input type="text" name="rules[<?php echo $index; ?>][pattern]" value="<?php echo esc_attr($rule['pattern'] ?? ''); ?>" placeholder="کد پترن" style="width:100px;">
+                <div style="margin-top:10px;">
+                    <strong>مقادیر متغیرها (به ترتیب):</strong><br>
+                    <textarea name="rules[<?php echo $index; ?>][vars]" style="width:100%;height:50px;" placeholder="name:{billing_first_name};order:{order_id}"><?php echo esc_textarea($rule['vars'] ?? ''); ?></textarea>
+                    <p class="description">
+                        فرمت: <code>key:value;key2:value2</code> —
+                        شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
+                        <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>
+                    </p>
+                </div>
+            </div>
+            <div class="text-fields" style="margin-top:10px;<?php echo $send_type !== 'text' ? 'display:none;' : ''; ?>">
+                <strong>متن پیامک:</strong><br>
+                <textarea name="rules[<?php echo $index; ?>][text_body]" style="width:100%;height:80px;" placeholder="سفارش شما #{order_id} ثبت شد. با تشکر، {billing_first_name} عزیز."><?php echo esc_textarea($rule['text_body'] ?? ''); ?></textarea>
                 <p class="description">
-                    فرمت: <code>key:value;key2:value2</code> —
                     شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
                     <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>
                 </p>
             </div>
-            <button type="button" class="button remove-row" style="color:#a00;border-color:#a00;margin-top:5px;">حذف این قانون</button>
+            <button type="button" class="button remove-row" style="color:#a00;border-color:#a00;margin-top:10px;">حذف این قانون</button>
         </div>
         <?php
     }
@@ -500,8 +545,9 @@ class Payamito_Admin {
 
         $raw = $_POST['credentials'] ?? [];
         update_option('payamito_credentials', [
-            'username'           => sanitize_text_field($raw['username'] ?? ''),
-            'password'           => sanitize_text_field($raw['password'] ?? ''),
+            'username'           => sanitize_text_field($raw['username']     ?? ''),
+            'password'           => sanitize_text_field($raw['password']     ?? ''),
+            'from_number'        => sanitize_text_field($raw['from_number']  ?? ''),
             'log_retention_days' => max(1, intval($raw['log_retention_days'] ?? 90)),
         ]);
         add_settings_error('payamito_msg', 'payamito_msg', 'اطلاعات پنل با موفقیت ذخیره شد.', 'success');
@@ -537,7 +583,8 @@ class Payamito_Admin {
 
         $rules = array_values(array_filter(
             array_map([$this, 'sanitize_rule'], $_POST['rules'] ?? []),
-            fn($r) => !empty($r['pattern'])
+            fn($r) => ($r['send_type'] === 'text' && !empty($r['text_body']))
+                   || ($r['send_type'] !== 'text' && !empty($r['pattern']))
         ));
 
         update_option('payamito_schedule_rules', $rules);
@@ -546,11 +593,13 @@ class Payamito_Admin {
 
     private function sanitize_rule(array $r): array {
         return [
-            'status'     => sanitize_text_field($r['status']     ?? ''),
-            'delay_val'  => max(0, (int) ($r['delay_val']        ?? 0)),
-            'delay_unit' => sanitize_text_field($r['delay_unit'] ?? 'minutes'),
-            'pattern'    => sanitize_text_field($r['pattern']    ?? ''),
-            'vars'       => sanitize_textarea_field($r['vars']   ?? ''),
+            'status'     => sanitize_text_field($r['status']       ?? ''),
+            'delay_val'  => max(0, (int) ($r['delay_val']          ?? 0)),
+            'delay_unit' => sanitize_text_field($r['delay_unit']   ?? 'minutes'),
+            'send_type'  => in_array($r['send_type'] ?? '', ['pattern', 'text'], true) ? $r['send_type'] : 'pattern',
+            'pattern'    => sanitize_text_field($r['pattern']      ?? ''),
+            'vars'       => sanitize_textarea_field($r['vars']     ?? ''),
+            'text_body'  => sanitize_textarea_field($r['text_body'] ?? ''),
         ];
     }
 }

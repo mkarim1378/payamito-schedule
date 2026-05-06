@@ -15,7 +15,7 @@ class Payamito_Scheduler {
 
     public function __construct() {
         add_action('woocommerce_order_status_changed', [$this, 'on_status_change'], 10, 4);
-        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],          10, 5);
+        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],          10, 7);
     }
 
     public function on_status_change(int $order_id, string $from_status, string $to_status, $order): void {
@@ -30,10 +30,12 @@ class Payamito_Scheduler {
 
             $hook_args = [
                 'order_id'     => $order_id,
-                'pattern_code' => $rule['pattern'],
-                'vars_str'     => $rule['vars'],
+                'pattern_code' => $rule['pattern']   ?? '',
+                'vars_str'     => $rule['vars']       ?? '',
                 'scheduled_at' => date('Y-m-d H:i:s', $run_at),
                 'attempt'      => 1,
+                'send_type'    => $rule['send_type']  ?? 'pattern',
+                'text_body'    => $rule['text_body']  ?? '',
             ];
 
             if (as_has_scheduled_action('payamito_execute_scheduled_sms', $hook_args, self::AS_GROUP)) {
@@ -44,7 +46,15 @@ class Payamito_Scheduler {
         }
     }
 
-    public function execute(int $order_id, string $pattern_code, string $vars_str, ?string $scheduled_at = null, int $attempt = 1): void {
+    public function execute(
+        int $order_id,
+        string $pattern_code,
+        string $vars_str,
+        ?string $scheduled_at = null,
+        int $attempt = 1,
+        string $send_type = 'pattern',
+        string $text_body = ''
+    ): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
 
@@ -59,16 +69,17 @@ class Payamito_Scheduler {
             Payamito_Logger::insert([
                 'order_id'     => $order_id,
                 'mobile'       => $order->get_billing_phone(),
-                'pattern'      => $pattern_code,
-                'vars'         => $vars_str,
+                'pattern'      => $send_type === 'text' ? 'text' : $pattern_code,
+                'vars'         => $send_type === 'text' ? $text_body : $vars_str,
                 'status'       => 'failed',
                 'response'     => $e->getMessage(),
                 'attempt'      => $attempt,
                 'scheduled_at' => $scheduled_at ?? $now,
                 'sent_at'      => null,
             ]);
+            $label = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
             $order->add_order_note(
-                sprintf('[پیامیتو] شماره تلفن سفارش نامعتبر است — ارسال پترن %s لغو شد.', $pattern_code),
+                sprintf('[پیامیتو] شماره تلفن سفارش نامعتبر است — ارسال %s لغو شد.', $label),
                 false, false
             );
             return;
@@ -80,19 +91,30 @@ class Payamito_Scheduler {
             $credentials['password'] ?? ''
         );
 
-        $sms_args = $this->resolve_vars($vars_str, $order);
-        $result   = $api->send_pattern_sms($phone, $pattern_code, $sms_args);
-        $success  = $result !== null;
-        $masked   = $this->mask_phone($phone);
+        if ($send_type === 'text') {
+            $resolved_text = $this->resolve_text($text_body, $order);
+            $from          = $credentials['from_number'] ?? '';
+            $result        = $api->send_smart_sms($phone, $resolved_text, $from);
+            $log_pattern   = 'text';
+            $log_vars      = $text_body;
+        } else {
+            $sms_args    = $this->resolve_vars($vars_str, $order);
+            $result      = $api->send_pattern_sms($phone, $pattern_code, $sms_args);
+            $log_pattern = $pattern_code;
+            $log_vars    = $vars_str;
+        }
+
+        $success = $result !== null;
+        $masked  = $this->mask_phone($phone);
 
         Payamito_Logger::insert([
             'order_id'     => $order_id,
             'mobile'       => $phone,
-            'pattern'      => $pattern_code,
-            'vars'         => $vars_str,
+            'pattern'      => $log_pattern,
+            'vars'         => $log_vars,
             'status'       => $success ? 'sent' : 'failed',
             'response'     => $success
-                ? (is_object($result) ? print_r($result, true) : (string) $result)
+                ? (is_array($result) ? wp_json_encode($result) : (is_object($result) ? print_r($result, true) : (string) $result))
                 : null,
             'attempt'      => $attempt,
             'scheduled_at' => $scheduled_at ?? $now,
@@ -100,9 +122,10 @@ class Payamito_Scheduler {
         ]);
 
         if ($success) {
-            $response_str = is_object($result) ? print_r($result, true) : (string) $result;
+            $response_str = is_array($result) ? wp_json_encode($result) : (is_object($result) ? print_r($result, true) : (string) $result);
+            $label        = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
             $order->add_order_note(
-                sprintf('[پیامیتو] پیامک پترن %s به شماره %s ارسال شد. (پاسخ: %s)', $pattern_code, $masked, $response_str),
+                sprintf('[پیامیتو] پیامک %s به شماره %s ارسال شد. (پاسخ: %s)', $label, $masked, $response_str),
                 false,
                 false
             );
@@ -110,19 +133,22 @@ class Payamito_Scheduler {
         }
 
         if ($attempt < self::MAX_ATTEMPTS) {
-            $delay         = self::RETRY_DELAYS[$attempt];
+            $delay           = self::RETRY_DELAYS[$attempt];
             $retry_hook_args = [
                 'order_id'     => $order_id,
                 'pattern_code' => $pattern_code,
                 'vars_str'     => $vars_str,
                 'scheduled_at' => $scheduled_at,
                 'attempt'      => $attempt + 1,
+                'send_type'    => $send_type,
+                'text_body'    => $text_body,
             ];
             as_schedule_single_action(time() + $delay, 'payamito_execute_scheduled_sms', $retry_hook_args, self::AS_GROUP);
+            $label = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
             $order->add_order_note(
                 sprintf(
-                    '[پیامیتو] خطا در ارسال پترن %s به %s — تلاش %d از %d. ارسال مجدد در %s.',
-                    $pattern_code,
+                    '[پیامیتو] خطا در ارسال %s به %s — تلاش %d از %d. ارسال مجدد در %s.',
+                    $label,
                     $masked,
                     $attempt,
                     self::MAX_ATTEMPTS,
@@ -132,10 +158,11 @@ class Payamito_Scheduler {
                 false
             );
         } else {
+            $label = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
             $order->add_order_note(
                 sprintf(
-                    '[پیامیتو] خطا در ارسال پترن %s به %s — همه %d تلاش ناموفق بود.',
-                    $pattern_code,
+                    '[پیامیتو] خطا در ارسال %s به %s — همه %d تلاش ناموفق بود.',
+                    $label,
                     $masked,
                     self::MAX_ATTEMPTS
                 ),
@@ -169,6 +196,17 @@ class Payamito_Scheduler {
     private function mask_phone(string $phone): string {
         if (strlen($phone) < 7) return $phone;
         return substr($phone, 0, 4) . '****' . substr($phone, -3);
+    }
+
+    private function resolve_text(string $text, WC_Abstract_Order $order): string {
+        $placeholders = [
+            '{billing_first_name}' => $order->get_billing_first_name(),
+            '{billing_last_name}'  => $order->get_billing_last_name(),
+            '{order_id}'           => (string) $order->get_id(),
+            '{order_total}'        => (string) $order->get_total(),
+            '{billing_phone}'      => $order->get_billing_phone(),
+        ];
+        return str_replace(array_keys($placeholders), array_values($placeholders), $text);
     }
 
     private function resolve_vars(string $vars_str, WC_Abstract_Order $order): array {

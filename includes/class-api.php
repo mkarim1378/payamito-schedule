@@ -10,6 +10,35 @@ class Payamito_Api {
         private string $password,
     ) {}
 
+    public function send_smart_sms(string $mobile, string $text, string $from): mixed {
+        $response = wp_remote_post('https://rest.payamak-panel.com/api/SmartSMS/Send', [
+            'timeout' => 10,
+            'headers' => ['Content-Type' => 'application/json'],
+            'body'    => wp_json_encode([
+                'username' => $this->username,
+                'password' => $this->password,
+                'to'       => $mobile,
+                'text'     => $text,
+                'from'     => $from,
+            ]),
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('[Payamito] SmartSMS error: ' . $response->get_error_message());
+            return null;
+        }
+
+        $body       = json_decode(wp_remote_retrieve_body($response), true);
+        $ret_status = (int) ($body['RetStatus'] ?? 0);
+
+        if ($ret_status !== 1) {
+            error_log('[Payamito] SmartSMS error: RetStatus=' . $ret_status . ' Value=' . ($body['Value'] ?? ''));
+            return null;
+        }
+
+        return $body;
+    }
+
     public function send_pattern_sms(string $mobile, int|string $body_id, array $args): mixed {
         try {
             $client = new SoapClient($this->endpoint, [
