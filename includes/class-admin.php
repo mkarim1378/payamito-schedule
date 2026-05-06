@@ -12,6 +12,7 @@ class Payamito_Admin {
         add_action('add_meta_boxes',                    [$this, 'register_meta_box']);
         add_action('admin_post_payamito_resend_sms',  [$this, 'handle_resend']);
         add_action('admin_post_payamito_cancel_sms',  [$this, 'handle_cancel_sms']);
+        add_action('admin_post_payamito_send_now',    [$this, 'handle_send_now']);
     }
 
     // -------------------------------------------------------------------------
@@ -38,6 +39,7 @@ class Payamito_Admin {
             ? $post_or_order->get_id()
             : (int) $post_or_order->ID;
 
+        $order     = $post_or_order instanceof WC_Abstract_Order ? $post_or_order : wc_get_order($order_id);
         $scheduled = $this->get_pending_actions_for_order($order_id);
         $entries   = Payamito_Logger::get_by_order($order_id);
 
@@ -57,27 +59,43 @@ class Payamito_Admin {
                 $attempt   = (int) ($args['attempt'] ?? 1);
                 $date      = $action->get_schedule()->get_date();
                 $time_str  = $date ? $date->format('Y-m-d H:i') : '—';
-                $full_text = $is_text ? ($args['text_body'] ?? '') : '';
+                $raw_text     = $is_text ? ($args['text_body'] ?? '') : '';
+                $display_text = ($raw_text && $order instanceof WC_Abstract_Order)
+                    ? str_replace(
+                        array_keys(Payamito_Scheduler::build_placeholders($order)),
+                        array_values(Payamito_Scheduler::build_placeholders($order)),
+                        $raw_text
+                    )
+                    : $raw_text;
                 ?>
                 <div style="border:1px solid #b3d9ff;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;background:#f0f7ff;">
                     <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                         <strong><?php echo esc_html($label); ?></strong>
                         <span style="color:#0969da">⏱ در صف</span>
                     </div>
-                    <?php if ($full_text) : ?>
-                        <div style="color:#333;margin-bottom:4px;line-height:1.5;"><?php echo esc_html($full_text); ?></div>
+                    <?php if ($display_text) : ?>
+                        <div style="color:#333;margin-bottom:4px;line-height:1.5;white-space:pre-wrap;"><?php echo esc_html($display_text); ?></div>
                     <?php endif; ?>
                     <div style="color:#555;">🕐 ارسال در: <?php echo esc_html($time_str); ?></div>
                     <?php if ($attempt > 1) : ?>
                         <div style="color:#999;margin-top:2px;">تلاش مجدد #<?php echo $attempt; ?></div>
                     <?php endif; ?>
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
-                        <?php wp_nonce_field('payamito_cancel_sms', 'payamito_cancel_nonce'); ?>
-                        <input type="hidden" name="action"    value="payamito_cancel_sms">
-                        <input type="hidden" name="action_id" value="<?php echo (int) $action_id; ?>">
-                        <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;"
-                            onclick="return confirm('آیا از لغو این پیامک مطمئن هستید؟')">⊘ لغو پیامک</button>
-                    </form>
+                    <div style="display:flex;gap:6px;margin-top:6px;">
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                            <?php wp_nonce_field('payamito_send_now', 'payamito_send_now_nonce'); ?>
+                            <input type="hidden" name="action"    value="payamito_send_now">
+                            <input type="hidden" name="action_id" value="<?php echo (int) $action_id; ?>">
+                            <button type="submit" class="button button-small button-primary"
+                                onclick="return confirm('پیامک همین الان ارسال شود؟')">⚡ ارسال فوری</button>
+                        </form>
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                            <?php wp_nonce_field('payamito_cancel_sms', 'payamito_cancel_nonce'); ?>
+                            <input type="hidden" name="action"    value="payamito_cancel_sms">
+                            <input type="hidden" name="action_id" value="<?php echo (int) $action_id; ?>">
+                            <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;"
+                                onclick="return confirm('آیا از لغو این پیامک مطمئن هستید؟')">⊘ لغو</button>
+                        </form>
+                    </div>
                 </div>
             <?php endforeach;
         endif;
@@ -111,8 +129,16 @@ class Payamito_Admin {
                         <strong><?php echo $is_text ? 'متن ثابت' : ('پترن: ' . esc_html($entry['pattern'])); ?></strong>
                         <?php echo $status_map[$entry['status']] ?? esc_html($entry['status']); ?>
                     </div>
-                    <?php if ($is_text && !empty($entry['vars'])) : ?>
-                        <div style="color:#333;margin-bottom:4px;line-height:1.5;"><?php echo esc_html($entry['vars']); ?></div>
+                    <?php if ($is_text && !empty($entry['vars'])) :
+                        $display_entry_text = ($order instanceof WC_Abstract_Order)
+                            ? str_replace(
+                                array_keys(Payamito_Scheduler::build_placeholders($order)),
+                                array_values(Payamito_Scheduler::build_placeholders($order)),
+                                $entry['vars']
+                            )
+                            : $entry['vars'];
+                    ?>
+                        <div style="color:#333;margin-bottom:4px;line-height:1.5;white-space:pre-wrap;"><?php echo esc_html($display_entry_text); ?></div>
                     <?php endif; ?>
                     <div style="color:#666;">📱 <?php echo esc_html($masked); ?></div>
                     <div style="color:#666;">🕐 <?php echo esc_html($entry['scheduled_at']); ?></div>
@@ -162,6 +188,49 @@ class Payamito_Admin {
                 error_log('[Payamito] Cancel action failed: ' . $e->getMessage());
             }
         }
+
+        wp_safe_redirect($back);
+        exit;
+    }
+
+    public function handle_send_now(): void {
+        check_admin_referer('payamito_send_now', 'payamito_send_now_nonce');
+        if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
+
+        $action_id = (int) ($_POST['action_id'] ?? 0);
+        $back      = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
+
+        if (!$action_id) {
+            wp_safe_redirect($back);
+            exit;
+        }
+
+        $store  = ActionScheduler_Store::instance();
+        $action = $store->fetch_action($action_id);
+
+        if (!$action || $action->get_hook() !== 'payamito_execute_scheduled_sms') {
+            wp_safe_redirect($back);
+            exit;
+        }
+
+        $args = $action->get_args();
+
+        try {
+            $store->cancel_action($action_id);
+        } catch (Exception $e) {
+            error_log('[Payamito] Cancel in send_now failed: ' . $e->getMessage());
+        }
+
+        do_action(
+            'payamito_execute_scheduled_sms',
+            (int)    ($args['order_id']     ?? 0),
+            (string) ($args['pattern_code'] ?? ''),
+            (string) ($args['vars_str']     ?? ''),
+            null,
+            1,
+            (string) ($args['send_type']    ?? 'pattern'),
+            (string) ($args['text_body']    ?? '')
+        );
 
         wp_safe_redirect($back);
         exit;
