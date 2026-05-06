@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.9.5] - 2026-05-06
+
+### Added
+- لینک پرداخت کوتاه `{payment_link}` — به جای URL طولانی WooCommerce، آدرس کوتاه `https://domain.com/pay/{order_id}` تولید می‌شود
+- Rewrite rule وردپرس: `pay/([0-9]+)` → redirect به `get_checkout_payment_url()` سفارش مربوطه
+- `flush_rewrite_rules()` در activation و deactivation hook افزونه
+
+### Changed
+- گزینه «متن ثابت (SmartSMS)» به عنوان پیش‌فرض در فرم افزودن قانون جدید
+- ارتفاع textarea متن پیامک از ۸۰ به ۱۶۰ پیکسل افزایش یافت
+
+---
+
 ## [2.9.4] - 2026-05-06
 
 ### Added

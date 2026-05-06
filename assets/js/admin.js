@@ -21,8 +21,8 @@ function buildRuleRow(index) {
             <hr style="margin:10px 0;border:0;border-top:1px solid #eee;">
             <strong>نوع ارسال:</strong>
             <select name="rules[${index}][send_type]" class="send-type-select">
-                <option value="pattern">پترن (خط خدماتی)</option>
                 <option value="text">متن ثابت (SmartSMS)</option>
+                <option value="pattern">پترن (خط خدماتی)</option>
             </select>
             <div class="pattern-fields" style="margin-top:10px;">
                 <strong>کد پترن:</strong>
@@ -35,7 +35,7 @@ function buildRuleRow(index) {
             </div>
             <div class="text-fields" style="margin-top:10px;display:none;">
                 <strong>متن پیامک:</strong><br>
-                <textarea name="rules[${index}][text_body]" style="width:100%;height:80px;"
+                <textarea name="rules[${index}][text_body]" style="width:100%;height:160px;"
                     placeholder="سفارش شما #{order_id} ثبت شد. با تشکر، {billing_first_name} عزیز."></textarea>
                 <p class="description">
                     شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,

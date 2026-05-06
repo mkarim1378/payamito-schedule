@@ -228,7 +228,7 @@ class Payamito_Scheduler {
             '{billing_phone}'      => $order->get_billing_phone(),
             '{product_names}'      => implode('، ', $names),
             '{product_links}'      => implode('، ', $links),
-            '{payment_link}'       => $order->get_checkout_payment_url(),
+            '{payment_link}'       => home_url('/pay/' . $order->get_id()),
         ];
     }
 

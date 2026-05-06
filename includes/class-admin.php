@@ -498,8 +498,8 @@ class Payamito_Admin {
             <hr style="margin:10px 0;border:0;border-top:1px solid #eee;">
             <strong>نوع ارسال:</strong>
             <select name="rules[<?php echo $index; ?>][send_type]" class="send-type-select">
-                <option value="pattern" <?php selected($send_type, 'pattern'); ?>>پترن (خط خدماتی)</option>
                 <option value="text"    <?php selected($send_type, 'text'); ?>>متن ثابت (SmartSMS)</option>
+                <option value="pattern" <?php selected($send_type, 'pattern'); ?>>پترن (خط خدماتی)</option>
             </select>
             <div class="pattern-fields" style="margin-top:10px;<?php echo $send_type === 'text' ? 'display:none;' : ''; ?>">
                 <strong>کد پترن:</strong>
@@ -517,7 +517,7 @@ class Payamito_Admin {
             </div>
             <div class="text-fields" style="margin-top:10px;<?php echo $send_type !== 'text' ? 'display:none;' : ''; ?>">
                 <strong>متن پیامک:</strong><br>
-                <textarea name="rules[<?php echo $index; ?>][text_body]" style="width:100%;height:80px;" placeholder="سفارش شما #{order_id} ثبت شد. با تشکر، {billing_first_name} عزیز."><?php echo esc_textarea($rule['text_body'] ?? ''); ?></textarea>
+                <textarea name="rules[<?php echo $index; ?>][text_body]" style="width:100%;height:160px;" placeholder="سفارش شما #{order_id} ثبت شد. با تشکر، {billing_first_name} عزیز."><?php echo esc_textarea($rule['text_body'] ?? ''); ?></textarea>
                 <p class="description">
                     شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
                     <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>,
