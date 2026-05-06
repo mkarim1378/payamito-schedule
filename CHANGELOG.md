@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.10.0] - 2026-05-06
+
+### Fixed
+- دکمه «ارسال فوری» حالا واقعاً پیامک را ارسال می‌کند — به جای `fetch_action` که در برخی محیط‌ها action را پیدا نمی‌کرد، args مستقیماً از hidden field های فرم خوانده می‌شوند
+
+---
+
 ## [2.9.9] - 2026-05-06
 
 ### Added

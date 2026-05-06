@@ -83,8 +83,13 @@ class Payamito_Admin {
                     <div style="display:flex;gap:6px;margin-top:6px;">
                         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                             <?php wp_nonce_field('payamito_send_now', 'payamito_send_now_nonce'); ?>
-                            <input type="hidden" name="action"    value="payamito_send_now">
-                            <input type="hidden" name="action_id" value="<?php echo (int) $action_id; ?>">
+                            <input type="hidden" name="action"        value="payamito_send_now">
+                            <input type="hidden" name="action_id"     value="<?php echo (int) $action_id; ?>">
+                            <input type="hidden" name="order_id"      value="<?php echo (int) ($args['order_id'] ?? 0); ?>">
+                            <input type="hidden" name="pattern_code"  value="<?php echo esc_attr($args['pattern_code'] ?? ''); ?>">
+                            <input type="hidden" name="vars_str"      value="<?php echo esc_attr($args['vars_str'] ?? ''); ?>">
+                            <input type="hidden" name="send_type"     value="<?php echo esc_attr($args['send_type'] ?? 'pattern'); ?>">
+                            <input type="hidden" name="text_body"     value="<?php echo esc_attr($args['text_body'] ?? ''); ?>">
                             <button type="submit" class="button button-small button-primary"
                                 onclick="return confirm('پیامک همین الان ارسال شود؟')">⚡ ارسال فوری</button>
                         </form>
@@ -197,40 +202,28 @@ class Payamito_Admin {
         check_admin_referer('payamito_send_now', 'payamito_send_now_nonce');
         if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
 
-        $action_id = (int) ($_POST['action_id'] ?? 0);
         $back      = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
+        $action_id = (int)    ($_POST['action_id']    ?? 0);
+        $order_id  = (int)    ($_POST['order_id']     ?? 0);
+        $send_type = sanitize_text_field($_POST['send_type']    ?? 'pattern');
+        $text_body = sanitize_textarea_field($_POST['text_body'] ?? '');
+        $pat_code  = sanitize_text_field($_POST['pattern_code'] ?? '');
+        $vars_str  = sanitize_textarea_field($_POST['vars_str'] ?? '');
 
-        if (!$action_id) {
+        if (!$order_id) {
             wp_safe_redirect($back);
             exit;
         }
 
-        $store  = ActionScheduler_Store::instance();
-        $action = $store->fetch_action($action_id);
-
-        if (!$action || $action->get_hook() !== 'payamito_execute_scheduled_sms') {
-            wp_safe_redirect($back);
-            exit;
+        if ($action_id) {
+            try {
+                ActionScheduler_Store::instance()->cancel_action($action_id);
+            } catch (Exception $e) {
+                error_log('[Payamito] Cancel in send_now failed: ' . $e->getMessage());
+            }
         }
 
-        $args = $action->get_args();
-
-        try {
-            $store->cancel_action($action_id);
-        } catch (Exception $e) {
-            error_log('[Payamito] Cancel in send_now failed: ' . $e->getMessage());
-        }
-
-        do_action(
-            'payamito_execute_scheduled_sms',
-            (int)    ($args['order_id']     ?? 0),
-            (string) ($args['pattern_code'] ?? ''),
-            (string) ($args['vars_str']     ?? ''),
-            null,
-            1,
-            (string) ($args['send_type']    ?? 'pattern'),
-            (string) ($args['text_body']    ?? '')
-        );
+        do_action('payamito_execute_scheduled_sms', $order_id, $pat_code, $vars_str, null, 1, $send_type, $text_body);
 
         wp_safe_redirect($back);
         exit;
