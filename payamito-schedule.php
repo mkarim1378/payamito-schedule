@@ -2,7 +2,7 @@
 /**
  * Plugin Name: زمان‌بندی پیامک پیامیتو
  * Description: افزونه جانبی برای ارسال زمان‌بندی شده پیامک‌های ووکامرس با پترن (خط خدماتی).
- * Version: 2.9.7
+ * Version: 2.9.8
  * Author: آکادمی کارنو
  * Author-URI: https://sepehralimohammadi.com
  * Requires Plugins: woocommerce
@@ -11,7 +11,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('PAYAMITO_SCHEDULE_VERSION', '2.9.7');
+define('PAYAMITO_SCHEDULE_VERSION', '2.9.8');
 define('PAYAMITO_SCHEDULE_DIR',     plugin_dir_path(__FILE__));
 define('PAYAMITO_SCHEDULE_URL',     plugin_dir_url(__FILE__));
 

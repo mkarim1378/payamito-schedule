@@ -10,7 +10,8 @@ class Payamito_Admin {
         add_action('admin_init',                        [$this, 'handle_submission']);
         add_action('admin_enqueue_scripts',             [$this, 'enqueue_scripts']);
         add_action('add_meta_boxes',                    [$this, 'register_meta_box']);
-        add_action('admin_post_payamito_resend_sms',    [$this, 'handle_resend']);
+        add_action('admin_post_payamito_resend_sms',  [$this, 'handle_resend']);
+        add_action('admin_post_payamito_cancel_sms',  [$this, 'handle_cancel_sms']);
     }
 
     // -------------------------------------------------------------------------
@@ -48,26 +49,37 @@ class Payamito_Admin {
         // ── پیامک‌های در صف ──────────────────────────────────────────
         if (!empty($scheduled)) :
             echo '<p style="font-weight:600;margin:0 0 6px;font-size:12px;color:#555;">⏳ برنامه‌ریزی شده:</p>';
-            foreach ($scheduled as $action) :
+            foreach ($scheduled as $action_id => $action) :
                 $args      = $action->get_args();
                 $send_type = $args['send_type'] ?? 'pattern';
-                $label     = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . ($args['pattern_code'] ?? ''));
+                $is_text   = $send_type === 'text';
+                $label     = $is_text ? 'متن ثابت' : ('پترن ' . ($args['pattern_code'] ?? ''));
                 $attempt   = (int) ($args['attempt'] ?? 1);
                 $date      = $action->get_schedule()->get_date();
                 $time_str  = $date ? $date->format('Y-m-d H:i') : '—';
+                $full_text = $is_text ? ($args['text_body'] ?? '') : '';
                 ?>
                 <div style="border:1px solid #b3d9ff;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;background:#f0f7ff;">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                         <strong><?php echo esc_html($label); ?></strong>
-                        <span style="color:#0969da">در صف</span>
+                        <span style="color:#0969da">⏱ در صف</span>
                     </div>
+                    <?php if ($full_text) : ?>
+                        <div style="color:#333;margin-bottom:4px;line-height:1.5;"><?php echo esc_html($full_text); ?></div>
+                    <?php endif; ?>
                     <div style="color:#555;">🕐 ارسال در: <?php echo esc_html($time_str); ?></div>
                     <?php if ($attempt > 1) : ?>
-                        <div style="color:#999;">تلاش مجدد #<?php echo $attempt; ?></div>
+                        <div style="color:#999;margin-top:2px;">تلاش مجدد #<?php echo $attempt; ?></div>
                     <?php endif; ?>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
+                        <?php wp_nonce_field('payamito_cancel_sms', 'payamito_cancel_nonce'); ?>
+                        <input type="hidden" name="action"    value="payamito_cancel_sms">
+                        <input type="hidden" name="action_id" value="<?php echo (int) $action_id; ?>">
+                        <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;"
+                            onclick="return confirm('آیا از لغو این پیامک مطمئن هستید؟')">⊘ لغو پیامک</button>
+                    </form>
                 </div>
-                <?php
-            endforeach;
+            <?php endforeach;
         endif;
 
         // ── تاریخچه ارسال ────────────────────────────────────────────
@@ -81,32 +93,37 @@ class Payamito_Admin {
                 'failed'    => '<span style="color:#cf222e">✗ ناموفق</span>',
                 'cancelled' => '<span style="color:#999">⊘ لغوشده</span>',
             ];
+            $bg_map = [
+                'sent'      => 'background:#f0fff4;border-color:#b7f0c8;',
+                'failed'    => 'background:#fff5f5;border-color:#ffc1c1;',
+                'cancelled' => 'background:#fafafa;border-color:#ddd;',
+            ];
 
             foreach ($entries as $entry) :
-                $masked  = strlen($entry['mobile']) > 6
+                $masked   = strlen($entry['mobile']) > 6
                     ? substr($entry['mobile'], 0, 4) . '****' . substr($entry['mobile'], -3)
                     : $entry['mobile'];
-                $is_text = $entry['pattern'] === 'text';
+                $is_text  = $entry['pattern'] === 'text';
+                $bg_style = $bg_map[$entry['status']] ?? 'background:#fff;border-color:#ddd;';
                 ?>
-                <div style="border:1px solid #ddd;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;">
+                <div style="border:1px solid;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;<?php echo $bg_style; ?>">
                     <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                        <?php if ($is_text) : ?>
-                            <strong>متن ثابت: <span style="font-weight:normal"><?php echo esc_html(mb_strimwidth($entry['vars'], 0, 30, '...')); ?></span></strong>
-                        <?php else : ?>
-                            <strong>پترن: <?php echo esc_html($entry['pattern']); ?></strong>
-                        <?php endif; ?>
+                        <strong><?php echo $is_text ? 'متن ثابت' : ('پترن: ' . esc_html($entry['pattern'])); ?></strong>
                         <?php echo $status_map[$entry['status']] ?? esc_html($entry['status']); ?>
                     </div>
+                    <?php if ($is_text && !empty($entry['vars'])) : ?>
+                        <div style="color:#333;margin-bottom:4px;line-height:1.5;"><?php echo esc_html($entry['vars']); ?></div>
+                    <?php endif; ?>
                     <div style="color:#666;">📱 <?php echo esc_html($masked); ?></div>
                     <div style="color:#666;">🕐 <?php echo esc_html($entry['scheduled_at']); ?></div>
                     <?php if ($entry['sent_at']) : ?>
-                        <div style="color:#666;">✅ <?php echo esc_html($entry['sent_at']); ?></div>
+                        <div style="color:#2ea44f;">✅ <?php echo esc_html($entry['sent_at']); ?></div>
                     <?php endif; ?>
                     <?php if ($entry['status'] === 'failed') : ?>
                         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
                             <?php wp_nonce_field('payamito_resend_sms', 'payamito_resend_nonce'); ?>
                             <input type="hidden" name="action" value="payamito_resend_sms">
-                            <input type="hidden" name="log_id"  value="<?php echo (int) $entry['id']; ?>">
+                            <input type="hidden" name="log_id" value="<?php echo (int) $entry['id']; ?>">
                             <button type="submit" class="button button-small">🔄 ارسال مجدد</button>
                         </form>
                     <?php endif; ?>
@@ -125,10 +142,29 @@ class Payamito_Admin {
             'per_page' => 100,
         ]);
 
-        return array_values(array_filter(
+        return array_filter(
             $actions,
             fn($action) => (int) ($action->get_args()['order_id'] ?? 0) === $order_id
-        ));
+        );
+    }
+
+    public function handle_cancel_sms(): void {
+        check_admin_referer('payamito_cancel_sms', 'payamito_cancel_nonce');
+        if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
+
+        $action_id = (int) ($_POST['action_id'] ?? 0);
+        $back      = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
+
+        if ($action_id) {
+            try {
+                ActionScheduler_Store::instance()->cancel_action($action_id);
+            } catch (Exception $e) {
+                error_log('[Payamito] Cancel action failed: ' . $e->getMessage());
+            }
+        }
+
+        wp_safe_redirect($back);
+        exit;
     }
 
     public function handle_resend(): void {
