@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.9.7] - 2026-05-06
+
+### Fixed
+- جایگزینی `woocommerce_checkout_order_created` با `woocommerce_new_order` برای زمان‌بندی پیامک سفارش‌های جدید — هوک قبلی فقط برای سفارش‌های فرانت‌اند فایر می‌شد؛ هوک جدید هم سفارش‌های ادمین و هم سفارش‌های چک‌اوت را پوشش می‌دهد
+
+### Added
+- متاباکس «پیامک‌های پیامیتو» در صفحه ویرایش سفارش حالا پیامک‌های **در صف** (از Action Scheduler) را نیز نمایش می‌دهد — قبل از تاریخچه ارسال، با رنگ آبی متمایز
+- متد `get_pending_actions_for_order()` برای query کردن action های pending مربوط به یک سفارش از Action Scheduler
+
+---
+
 ## [2.9.6] - 2026-05-06
 
 ### Fixed

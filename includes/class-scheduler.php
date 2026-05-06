@@ -14,15 +14,18 @@ class Payamito_Scheduler {
     private const AS_GROUP = 'payamito-sms';
 
     public function __construct() {
-        add_action('woocommerce_order_status_changed',   [$this, 'on_status_change'],      10, 4);
-        add_action('woocommerce_order_status_changed',   [$this, 'prevent_cancellation'],  20, 4);
-        add_action('woocommerce_checkout_order_created', [$this, 'on_new_order'],          10, 1);
-        add_action('payamito_execute_scheduled_sms',     [$this, 'execute'],               10, 7);
+        add_action('woocommerce_order_status_changed', [$this, 'on_status_change'],    10, 4);
+        add_action('woocommerce_order_status_changed', [$this, 'prevent_cancellation'], 20, 4);
+        add_action('woocommerce_new_order',            [$this, 'on_new_order'],         10, 2);
+        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],              10, 7);
     }
 
-    public function on_new_order($order): void {
+    public function on_new_order(int $order_id, $order): void {
+        if (!$order instanceof WC_Abstract_Order) {
+            $order = wc_get_order($order_id);
+        }
         if (!$order instanceof WC_Abstract_Order) return;
-        $this->on_status_change($order->get_id(), '', $order->get_status(), $order);
+        $this->on_status_change($order_id, '', $order->get_status(), $order);
     }
 
     public function prevent_cancellation(int $order_id, string $from, string $to, $order): void {

@@ -37,49 +37,98 @@ class Payamito_Admin {
             ? $post_or_order->get_id()
             : (int) $post_or_order->ID;
 
-        $entries = Payamito_Logger::get_by_order($order_id);
+        $scheduled = $this->get_pending_actions_for_order($order_id);
+        $entries   = Payamito_Logger::get_by_order($order_id);
 
-        if (empty($entries)) {
-            echo '<p style="color:#999;font-size:12px;">هیچ پیامکی برای این سفارش ثبت نشده.</p>';
+        if (empty($scheduled) && empty($entries)) {
+            echo '<p style="color:#999;font-size:12px;">هیچ پیامکی برای این سفارش ثبت یا برنامه‌ریزی نشده.</p>';
             return;
         }
 
-        $status_map = [
-            'sent'      => '<span style="color:#2ea44f">✓ ارسال‌شده</span>',
-            'failed'    => '<span style="color:#cf222e">✗ ناموفق</span>',
-            'cancelled' => '<span style="color:#999">⊘ لغوشده</span>',
-        ];
-
-        foreach ($entries as $entry) :
-            $masked = strlen($entry['mobile']) > 6
-                ? substr($entry['mobile'], 0, 4) . '****' . substr($entry['mobile'], -3)
-                : $entry['mobile'];
-            $is_text = $entry['pattern'] === 'text';
-            ?>
-            <div style="border:1px solid #ddd;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;">
-                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                    <?php if ($is_text) : ?>
-                        <strong>متن ثابت: <span style="font-weight:normal"><?php echo esc_html(mb_strimwidth($entry['vars'], 0, 30, '...')); ?></span></strong>
-                    <?php else : ?>
-                        <strong>پترن: <?php echo esc_html($entry['pattern']); ?></strong>
+        // ── پیامک‌های در صف ──────────────────────────────────────────
+        if (!empty($scheduled)) :
+            echo '<p style="font-weight:600;margin:0 0 6px;font-size:12px;color:#555;">⏳ برنامه‌ریزی شده:</p>';
+            foreach ($scheduled as $action) :
+                $args      = $action->get_args();
+                $send_type = $args['send_type'] ?? 'pattern';
+                $label     = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . ($args['pattern_code'] ?? ''));
+                $attempt   = (int) ($args['attempt'] ?? 1);
+                $date      = $action->get_schedule()->get_date();
+                $time_str  = $date ? $date->format('Y-m-d H:i') : '—';
+                ?>
+                <div style="border:1px solid #b3d9ff;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;background:#f0f7ff;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+                        <strong><?php echo esc_html($label); ?></strong>
+                        <span style="color:#0969da">در صف</span>
+                    </div>
+                    <div style="color:#555;">🕐 ارسال در: <?php echo esc_html($time_str); ?></div>
+                    <?php if ($attempt > 1) : ?>
+                        <div style="color:#999;">تلاش مجدد #<?php echo $attempt; ?></div>
                     <?php endif; ?>
-                    <?php echo $status_map[$entry['status']] ?? esc_html($entry['status']); ?>
                 </div>
-                <div style="color:#666;">📱 <?php echo esc_html($masked); ?></div>
-                <div style="color:#666;">🕐 <?php echo esc_html($entry['scheduled_at']); ?></div>
-                <?php if ($entry['sent_at']) : ?>
-                    <div style="color:#666;">✅ <?php echo esc_html($entry['sent_at']); ?></div>
-                <?php endif; ?>
-                <?php if ($entry['status'] === 'failed') : ?>
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
-                        <?php wp_nonce_field('payamito_resend_sms', 'payamito_resend_nonce'); ?>
-                        <input type="hidden" name="action" value="payamito_resend_sms">
-                        <input type="hidden" name="log_id"  value="<?php echo (int) $entry['id']; ?>">
-                        <button type="submit" class="button button-small">🔄 ارسال مجدد</button>
-                    </form>
-                <?php endif; ?>
-            </div>
-        <?php endforeach;
+                <?php
+            endforeach;
+        endif;
+
+        // ── تاریخچه ارسال ────────────────────────────────────────────
+        if (!empty($entries)) :
+            if (!empty($scheduled)) {
+                echo '<p style="font-weight:600;margin:8px 0 6px;font-size:12px;color:#555;">📋 تاریخچه:</p>';
+            }
+
+            $status_map = [
+                'sent'      => '<span style="color:#2ea44f">✓ ارسال‌شده</span>',
+                'failed'    => '<span style="color:#cf222e">✗ ناموفق</span>',
+                'cancelled' => '<span style="color:#999">⊘ لغوشده</span>',
+            ];
+
+            foreach ($entries as $entry) :
+                $masked  = strlen($entry['mobile']) > 6
+                    ? substr($entry['mobile'], 0, 4) . '****' . substr($entry['mobile'], -3)
+                    : $entry['mobile'];
+                $is_text = $entry['pattern'] === 'text';
+                ?>
+                <div style="border:1px solid #ddd;border-radius:4px;padding:8px;margin-bottom:8px;font-size:12px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                        <?php if ($is_text) : ?>
+                            <strong>متن ثابت: <span style="font-weight:normal"><?php echo esc_html(mb_strimwidth($entry['vars'], 0, 30, '...')); ?></span></strong>
+                        <?php else : ?>
+                            <strong>پترن: <?php echo esc_html($entry['pattern']); ?></strong>
+                        <?php endif; ?>
+                        <?php echo $status_map[$entry['status']] ?? esc_html($entry['status']); ?>
+                    </div>
+                    <div style="color:#666;">📱 <?php echo esc_html($masked); ?></div>
+                    <div style="color:#666;">🕐 <?php echo esc_html($entry['scheduled_at']); ?></div>
+                    <?php if ($entry['sent_at']) : ?>
+                        <div style="color:#666;">✅ <?php echo esc_html($entry['sent_at']); ?></div>
+                    <?php endif; ?>
+                    <?php if ($entry['status'] === 'failed') : ?>
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
+                            <?php wp_nonce_field('payamito_resend_sms', 'payamito_resend_nonce'); ?>
+                            <input type="hidden" name="action" value="payamito_resend_sms">
+                            <input type="hidden" name="log_id"  value="<?php echo (int) $entry['id']; ?>">
+                            <button type="submit" class="button button-small">🔄 ارسال مجدد</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach;
+        endif;
+    }
+
+    private function get_pending_actions_for_order(int $order_id): array {
+        if (!function_exists('as_get_scheduled_actions')) return [];
+
+        $actions = as_get_scheduled_actions([
+            'hook'     => 'payamito_execute_scheduled_sms',
+            'status'   => 'pending',
+            'group'    => 'payamito-sms',
+            'per_page' => 100,
+        ]);
+
+        return array_values(array_filter(
+            $actions,
+            fn($action) => (int) ($action->get_args()['order_id'] ?? 0) === $order_id
+        ));
     }
 
     public function handle_resend(): void {
