@@ -188,7 +188,34 @@ class Payamito_Admin {
 
         if ($action_id) {
             try {
-                ActionScheduler_Store::instance()->cancel_action($action_id);
+                $store  = ActionScheduler_Store::instance();
+                $action = $store->fetch_action($action_id);
+                if ($action) {
+                    $args      = $action->get_args();
+                    $order_id  = (int) ($args['order_id'] ?? 0);
+                    $order     = $order_id ? wc_get_order($order_id) : null;
+                    $mobile    = '';
+                    if ($order instanceof WC_Abstract_Order) {
+                        try {
+                            $mobile = Payamito_Scheduler::normalize_phone($order->get_billing_phone());
+                        } catch (\InvalidArgumentException $e) {
+                            $mobile = $order->get_billing_phone();
+                        }
+                    }
+                    $send_type = $args['send_type'] ?? 'pattern';
+                    Payamito_Logger::insert([
+                        'order_id'     => $order_id,
+                        'mobile'       => $mobile,
+                        'pattern'      => $send_type === 'text' ? 'text' : ($args['pattern_code'] ?? ''),
+                        'vars'         => $send_type === 'text' ? ($args['text_body'] ?? '') : ($args['vars_str'] ?? ''),
+                        'status'       => 'cancelled',
+                        'response'     => null,
+                        'attempt'      => (int) ($args['attempt'] ?? 1),
+                        'scheduled_at' => $args['scheduled_at'] ?? current_time('mysql'),
+                        'sent_at'      => null,
+                    ]);
+                }
+                $store->cancel_action($action_id);
             } catch (Exception $e) {
                 error_log('[Payamito] Cancel action failed: ' . $e->getMessage());
             }

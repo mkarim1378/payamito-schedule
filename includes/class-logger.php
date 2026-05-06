@@ -57,6 +57,9 @@ class Payamito_Logger {
             delete_transient('payamito_stats_cache');
             return $wpdb->insert_id;
         }
+        if ($wpdb->last_error) {
+            error_log('[Payamito] SMS log insert failed: ' . $wpdb->last_error);
+        }
         return false;
     }
 

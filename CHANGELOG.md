@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.11.0] - 2026-05-06
+
+### Fixed
+- ثبت آمار و تاریخچه پیامک‌ها پس از آپدیت پلاگین (بدون deactivate/activate) — جدول DB اکنون روی `plugins_loaded` با بررسی نسخه recreate می‌شود
+- لغو پیامک حالا یک رکورد با وضعیت «لغوشده» در تاریخچه ثبت می‌کند تا SMS های لغوشده نیز در آمار دیده شوند
+- خطاهای DB insert حالا به error log ثبت می‌شوند تا debugging ممکن باشد
+
+---
+
 ## [2.10.0] - 2026-05-06
 
 ### Fixed
