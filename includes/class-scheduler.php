@@ -14,8 +14,17 @@ class Payamito_Scheduler {
     private const AS_GROUP = 'payamito-sms';
 
     public function __construct() {
-        add_action('woocommerce_order_status_changed', [$this, 'on_status_change'], 10, 4);
-        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],          10, 7);
+        add_action('woocommerce_order_status_changed', [$this, 'on_status_change'],    10, 4);
+        add_action('woocommerce_order_status_changed', [$this, 'prevent_cancellation'], 20, 4);
+        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],              10, 7);
+    }
+
+    public function prevent_cancellation(int $order_id, string $from, string $to, $order): void {
+        if ($to !== 'cancelled') return;
+        $credentials = get_option('payamito_credentials', []);
+        if (empty($credentials['prevent_cancellation'])) return;
+
+        $order->update_status('pending', '[پیامیتو] لغو سفارش بلوکه شد — وضعیت به «در انتظار پرداخت» برگشت.');
     }
 
     public function on_status_change(int $order_id, string $from_status, string $to_status, $order): void {
@@ -200,25 +209,36 @@ class Payamito_Scheduler {
         return substr($phone, 0, 4) . '****' . substr($phone, -3);
     }
 
-    private function resolve_text(string $text, WC_Abstract_Order $order): string {
-        $placeholders = [
+    public static function build_placeholders(WC_Abstract_Order $order): array {
+        $names = [];
+        $links = [];
+        foreach ($order->get_items() as $item) {
+            $names[] = $item->get_name();
+            $product = $item->get_product();
+            if ($product) {
+                $links[] = get_permalink($product->get_id());
+            }
+        }
+
+        return [
             '{billing_first_name}' => $order->get_billing_first_name(),
             '{billing_last_name}'  => $order->get_billing_last_name(),
             '{order_id}'           => (string) $order->get_id(),
             '{order_total}'        => (string) $order->get_total(),
             '{billing_phone}'      => $order->get_billing_phone(),
+            '{product_names}'      => implode('، ', $names),
+            '{product_links}'      => implode('، ', $links),
+            '{payment_link}'       => $order->get_checkout_payment_url(),
         ];
+    }
+
+    private function resolve_text(string $text, WC_Abstract_Order $order): string {
+        $placeholders = self::build_placeholders($order);
         return str_replace(array_keys($placeholders), array_values($placeholders), $text);
     }
 
     private function resolve_vars(string $vars_str, WC_Abstract_Order $order): array {
-        $placeholders = [
-            '{billing_first_name}' => $order->get_billing_first_name(),
-            '{billing_last_name}'  => $order->get_billing_last_name(),
-            '{order_id}'           => (string) $order->get_id(),
-            '{order_total}'        => (string) $order->get_total(),
-            '{billing_phone}'      => $order->get_billing_phone(),
-        ];
+        $placeholders = self::build_placeholders($order);
 
         $result = [];
         foreach (explode(';', $vars_str) as $pair) {

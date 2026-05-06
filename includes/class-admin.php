@@ -102,13 +102,7 @@ class Payamito_Admin {
         }
 
         // resolve vars against current order data
-        $placeholders = [
-            '{billing_first_name}' => $order->get_billing_first_name(),
-            '{billing_last_name}'  => $order->get_billing_last_name(),
-            '{order_id}'           => (string) $order->get_id(),
-            '{order_total}'        => (string) $order->get_total(),
-            '{billing_phone}'      => $order->get_billing_phone(),
-        ];
+        $placeholders = Payamito_Scheduler::build_placeholders($order);
         $sms_args = [];
         foreach (explode(';', $entry['vars']) as $pair) {
             [$k, $v] = array_pad(explode(':', trim($pair), 2), 2, '');
@@ -134,14 +128,11 @@ class Payamito_Admin {
         $is_text     = $entry['pattern'] === 'text';
 
         if ($is_text) {
-            $placeholders = [
-                '{billing_first_name}' => $order->get_billing_first_name(),
-                '{billing_last_name}'  => $order->get_billing_last_name(),
-                '{order_id}'           => (string) $order->get_id(),
-                '{order_total}'        => (string) $order->get_total(),
-                '{billing_phone}'      => $order->get_billing_phone(),
-            ];
-            $resolved_text = str_replace(array_keys($placeholders), array_values($placeholders), $entry['vars']);
+            $resolved_text = str_replace(
+                array_keys($placeholders),
+                array_values($placeholders),
+                $entry['vars']
+            );
             $from          = $credentials['from_number'] ?? '';
             $result        = $api->send_smart_sms($mobile, $resolved_text, $from);
         } else {
@@ -238,7 +229,7 @@ class Payamito_Admin {
         settings_errors('payamito_msg');
 
         $rules       = get_option('payamito_schedule_rules', []);
-        $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'from_number' => '', 'log_retention_days' => 90]);
+        $credentials = get_option('payamito_credentials', ['username' => '', 'password' => '', 'from_number' => '', 'prevent_cancellation' => 0, 'log_retention_days' => 90]);
         $statuses    = wc_get_order_statuses();
         ?>
         <div class="wrap">
@@ -408,6 +399,15 @@ class Payamito_Admin {
                         </td>
                     </tr>
                     <tr>
+                        <th><label>جلوگیری از لغو سفارش:</label></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="credentials[prevent_cancellation]" value="1" <?php checked(!empty($credentials['prevent_cancellation'])); ?>>
+                                هیچ سفارشی به وضعیت «لغو شده» نرود و به «در انتظار پرداخت» برگردد
+                            </label>
+                        </td>
+                    </tr>
+                    <tr>
                         <th><label>نگهداری لاگ (روز):</label></th>
                         <td>
                             <input type="number" name="credentials[log_retention_days]" min="1" style="width:80px;"
@@ -510,7 +510,8 @@ class Payamito_Admin {
                     <p class="description">
                         فرمت: <code>key:value;key2:value2</code> —
                         شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
-                        <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>
+                        <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>,
+                        <code>{product_names}</code>, <code>{product_links}</code>, <code>{payment_link}</code>
                     </p>
                 </div>
             </div>
@@ -519,7 +520,8 @@ class Payamito_Admin {
                 <textarea name="rules[<?php echo $index; ?>][text_body]" style="width:100%;height:80px;" placeholder="سفارش شما #{order_id} ثبت شد. با تشکر، {billing_first_name} عزیز."><?php echo esc_textarea($rule['text_body'] ?? ''); ?></textarea>
                 <p class="description">
                     شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
-                    <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>
+                    <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>,
+                    <code>{product_names}</code>, <code>{product_links}</code>
                 </p>
             </div>
             <button type="button" class="button remove-row" style="color:#a00;border-color:#a00;margin-top:10px;">حذف این قانون</button>
@@ -545,10 +547,11 @@ class Payamito_Admin {
 
         $raw = $_POST['credentials'] ?? [];
         update_option('payamito_credentials', [
-            'username'           => sanitize_text_field($raw['username']     ?? ''),
-            'password'           => sanitize_text_field($raw['password']     ?? ''),
-            'from_number'        => sanitize_text_field($raw['from_number']  ?? ''),
-            'log_retention_days' => max(1, intval($raw['log_retention_days'] ?? 90)),
+            'username'              => sanitize_text_field($raw['username']     ?? ''),
+            'password'              => sanitize_text_field($raw['password']     ?? ''),
+            'from_number'           => sanitize_text_field($raw['from_number']  ?? ''),
+            'prevent_cancellation'  => !empty($raw['prevent_cancellation']) ? 1 : 0,
+            'log_retention_days'    => max(1, intval($raw['log_retention_days'] ?? 90)),
         ]);
         add_settings_error('payamito_msg', 'payamito_msg', 'اطلاعات پنل با موفقیت ذخیره شد.', 'success');
     }

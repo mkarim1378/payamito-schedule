@@ -6,6 +6,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.9.4] - 2026-05-06
+
+### Added
+- گزینه «جلوگیری از لغو سفارش» در تنظیمات — وقتی فعال باشد، هر سفارشی که به وضعیت «لغو شده» برود بلافاصله به «در انتظار پرداخت» برمی‌گردد
+- متد `prevent_cancellation()` در `Payamito_Scheduler` با hook روی `woocommerce_order_status_changed` با اولویت ۲۰
+
+---
+
+## [2.9.3] - 2026-05-06
+
+### Added
+- شورت‌کد `{payment_link}` — لینک مستقیم پرداخت سفارش (`get_checkout_payment_url`)؛ مشتری با کلیک روی لینک مستقیم به صفحه پرداخت همان سفارش می‌رود
+
+---
+
+## [2.9.2] - 2026-05-06
+
+### Added
+- شورت‌کد `{product_names}` — نام تمام محصولات سفارش جدا شده با ویرگول
+- شورت‌کد `{product_links}` — لینک صفحه تمام محصولات سفارش جدا شده با ویرگول
+- متد `public static Payamito_Scheduler::build_placeholders()` برای مدیریت متمرکز همه shortcode ها (حذف کد تکراری از ۴ مکان)
+
+---
+
 ## [2.9.1] - 2026-05-06
 
 ### Fixed

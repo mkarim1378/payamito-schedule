@@ -39,7 +39,8 @@ function buildRuleRow(index) {
                     placeholder="سفارش شما #{order_id} ثبت شد. با تشکر، {billing_first_name} عزیز."></textarea>
                 <p class="description">
                     شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
-                    <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>
+                    <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>,
+                    <code>{product_names}</code>, <code>{product_links}</code>, <code>{payment_link}</code>
                 </p>
             </div>
             <button type="button" class="button remove-row"
