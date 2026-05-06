@@ -24,7 +24,7 @@ function buildRuleRow(index) {
                 <option value="text">متن ثابت (SmartSMS)</option>
                 <option value="pattern">پترن (خط خدماتی)</option>
             </select>
-            <div class="pattern-fields" style="margin-top:10px;">
+            <div class="pattern-fields" style="margin-top:10px;display:none;">
                 <strong>کد پترن:</strong>
                 <input type="text" name="rules[${index}][pattern]" placeholder="کد پترن" style="width:100px;">
                 <div style="margin-top:10px;">
