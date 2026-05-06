@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.9.1] - 2026-05-06
+
+### Fixed
+- پشتیبانی از شماره موبایل ۱۰ رقمی بدون صفر اول (مثال: `9130766745` → `09130766745`) در `normalize_phone`
+
+---
+
 ## [2.9.0] - 2026-05-06
 
 ### Added

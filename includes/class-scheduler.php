@@ -184,6 +184,8 @@ class Payamito_Scheduler {
             $phone = '0' . substr($phone, 4);
         } elseif (str_starts_with($phone, '98') && strlen($phone) === 12) {
             $phone = '0' . substr($phone, 2);
+        } elseif (strlen($phone) === 10 && str_starts_with($phone, '9')) {
+            $phone = '0' . $phone;
         }
 
         if (strlen($phone) !== 11 || !str_starts_with($phone, '09')) {
