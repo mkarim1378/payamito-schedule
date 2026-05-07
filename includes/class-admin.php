@@ -122,14 +122,16 @@ class Payamito_Admin {
             }
 
             $status_map = [
-                'sent'      => '<span style="color:#2ea44f">✓ ارسال‌شده</span>',
-                'failed'    => '<span style="color:#cf222e">✗ ناموفق</span>',
-                'cancelled' => '<span style="color:#999">⊘ لغوشده</span>',
+                'sent'       => '<span style="color:#2ea44f">✓ ارسال‌شده</span>',
+                'failed'     => '<span style="color:#cf222e">✗ ناموفق</span>',
+                'cancelled'  => '<span style="color:#999">⊘ لغوشده</span>',
+                'superseded' => '<span style="color:#6e40c9">🔄 جایگزین شد</span>',
             ];
             $bg_map = [
-                'sent'      => 'background:#f0fff4;border-color:#b7f0c8;',
-                'failed'    => 'background:#fff5f5;border-color:#ffc1c1;',
-                'cancelled' => 'background:#fafafa;border-color:#ddd;',
+                'sent'       => 'background:#f0fff4;border-color:#b7f0c8;',
+                'failed'     => 'background:#fff5f5;border-color:#ffc1c1;',
+                'cancelled'  => 'background:#fafafa;border-color:#ddd;',
+                'superseded' => 'background:#f5f0ff;border-color:#c9b8f0;',
             ];
 
             foreach ($entries as $entry) :
@@ -159,6 +161,9 @@ class Payamito_Admin {
                     <div style="color:#666;">🕐 <?php echo esc_html(self::jalali($entry['scheduled_at'])); ?></div>
                     <?php if ($entry['sent_at']) : ?>
                         <div style="color:#2ea44f;">✅ <?php echo esc_html(self::jalali($entry['sent_at'])); ?></div>
+                    <?php endif; ?>
+                    <?php if ($entry['status'] === 'superseded' && !empty($entry['response'])) : ?>
+                        <div style="color:#6e40c9;margin-top:2px;font-size:11px;">وضعیت جدید سفارش: <?php echo esc_html($entry['response']); ?></div>
                     <?php endif; ?>
                     <?php if ($entry['status'] === 'failed') : ?>
                         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
@@ -573,10 +578,11 @@ class Payamito_Admin {
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:28px;">
                 <?php
                 $cards = [
-                    ['label' => 'کل ارسال‌ها',   'value' => number_format($stats['total']),              'color' => '#0969da'],
-                    ['label' => 'موفق',            'value' => number_format($stats['by_status']['sent']),  'color' => '#2ea44f'],
-                    ['label' => 'ناموفق',          'value' => number_format($stats['by_status']['failed']),'color' => '#cf222e'],
-                    ['label' => 'نرخ موفقیت',      'value' => $rate . '%',                                'color' => $rate_color],
+                    ['label' => 'کل ارسال‌ها',   'value' => number_format($stats['total']),                       'color' => '#0969da'],
+                    ['label' => 'موفق',            'value' => number_format($stats['by_status']['sent']),           'color' => '#2ea44f'],
+                    ['label' => 'ناموفق',          'value' => number_format($stats['by_status']['failed']),         'color' => '#cf222e'],
+                    ['label' => 'جایگزین‌شده',    'value' => number_format($stats['by_status']['superseded']),     'color' => '#6e40c9'],
+                    ['label' => 'نرخ موفقیت',      'value' => $rate . '%',                                         'color' => $rate_color],
                 ];
                 foreach ($cards as $card) : ?>
                     <div style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:20px 28px;min-width:140px;text-align:center;">

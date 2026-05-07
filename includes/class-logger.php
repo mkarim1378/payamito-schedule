@@ -113,7 +113,7 @@ class Payamito_Logger {
 
         // totals by status
         $rows      = $wpdb->get_results("SELECT status, COUNT(*) AS cnt FROM $table GROUP BY status", ARRAY_A) ?: [];
-        $by_status = ['sent' => 0, 'failed' => 0, 'cancelled' => 0];
+        $by_status = ['sent' => 0, 'failed' => 0, 'cancelled' => 0, 'superseded' => 0];
         foreach ($rows as $r) {
             if (isset($by_status[$r['status']])) $by_status[$r['status']] = (int) $r['cnt'];
         }

@@ -40,7 +40,7 @@ class Payamito_Scheduler {
         self::cancel_scheduled_for_order($post_id);
     }
 
-    public static function cancel_scheduled_for_order(int $order_id): void {
+    public static function cancel_scheduled_for_order(int $order_id, string $new_status = ''): void {
         if (!function_exists('as_get_scheduled_actions')) return;
         $actions = as_get_scheduled_actions([
             'hook'     => 'payamito_execute_scheduled_sms',
@@ -48,9 +48,38 @@ class Payamito_Scheduler {
             'group'    => self::AS_GROUP,
             'per_page' => 100,
         ]);
+        if (empty($actions)) return;
+
+        $mobile = '';
+        if ($new_status) {
+            $order = wc_get_order($order_id);
+            if ($order instanceof WC_Abstract_Order) {
+                try {
+                    $mobile = self::normalize_phone($order->get_billing_phone());
+                } catch (\InvalidArgumentException $e) {
+                    $mobile = $order->get_billing_phone();
+                }
+            }
+        }
+
         $store = ActionScheduler_Store::instance();
         foreach ($actions as $action_id => $action) {
-            if ((int) ($action->get_args()['order_id'] ?? 0) !== $order_id) continue;
+            $args = $action->get_args();
+            if ((int) ($args['order_id'] ?? 0) !== $order_id) continue;
+            if ($new_status) {
+                $send_type = $args['send_type'] ?? 'pattern';
+                Payamito_Logger::insert([
+                    'order_id'     => $order_id,
+                    'mobile'       => $mobile,
+                    'pattern'      => $send_type === 'text' ? 'text' : ($args['pattern_code'] ?? ''),
+                    'vars'         => $send_type === 'text' ? ($args['text_body'] ?? '') : ($args['vars_str'] ?? ''),
+                    'status'       => 'superseded',
+                    'response'     => $new_status,
+                    'attempt'      => (int) ($args['attempt'] ?? 1),
+                    'scheduled_at' => $args['scheduled_at'] ?? current_time('mysql'),
+                    'sent_at'      => null,
+                ]);
+            }
             try {
                 $store->cancel_action($action_id);
             } catch (Exception $e) {
@@ -71,6 +100,7 @@ class Payamito_Scheduler {
 
     public function on_status_change(int $order_id, string $from_status, string $to_status, $order): void {
         if (self::$reverting_cancellation) return;
+        self::cancel_scheduled_for_order($order_id, $to_status);
         $rules           = get_option('payamito_schedule_rules', []);
         $prefixed_status = 'wc-' . $to_status;
 
