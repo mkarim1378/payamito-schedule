@@ -10,9 +10,10 @@ class Payamito_Admin {
         add_action('admin_init',                        [$this, 'handle_submission']);
         add_action('admin_enqueue_scripts',             [$this, 'enqueue_scripts']);
         add_action('add_meta_boxes',                    [$this, 'register_meta_box']);
-        add_action('admin_post_payamito_resend_sms',  [$this, 'handle_resend']);
-        add_action('admin_post_payamito_cancel_sms',  [$this, 'handle_cancel_sms']);
-        add_action('admin_post_payamito_send_now',    [$this, 'handle_send_now']);
+        add_action('admin_post_payamito_resend_sms',      [$this, 'handle_resend']);
+        add_action('admin_post_payamito_cancel_sms',      [$this, 'handle_cancel_sms']);
+        add_action('admin_post_payamito_send_now',        [$this, 'handle_send_now']);
+        add_action('admin_post_payamito_cancel_all_sms',  [$this, 'handle_cancel_all_sms']);
     }
 
     // -------------------------------------------------------------------------
@@ -102,7 +103,16 @@ class Payamito_Admin {
                         </form>
                     </div>
                 </div>
-            <?php endforeach;
+            <?php endforeach; ?>
+            <?php if (count($scheduled) > 1) : ?>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:4px;">
+                    <?php wp_nonce_field('payamito_cancel_all_sms', 'payamito_cancel_all_nonce'); ?>
+                    <input type="hidden" name="action"   value="payamito_cancel_all_sms">
+                    <input type="hidden" name="order_id" value="<?php echo (int) $order_id; ?>">
+                    <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;width:100%;"
+                        onclick="return confirm('همه پیامک‌های زمان‌بندی‌شده لغو شوند؟')">⊘ لغو همه پیامک‌ها (<?php echo count($scheduled); ?>)</button>
+                </form>
+            <?php endif;
         endif;
 
         // ── تاریخچه ارسال ────────────────────────────────────────────
@@ -218,6 +228,64 @@ class Payamito_Admin {
                 $store->cancel_action($action_id);
             } catch (Exception $e) {
                 error_log('[Payamito] Cancel action failed: ' . $e->getMessage());
+            }
+        }
+
+        wp_safe_redirect($back);
+        exit;
+    }
+
+    public function handle_cancel_all_sms(): void {
+        check_admin_referer('payamito_cancel_all_sms', 'payamito_cancel_all_nonce');
+        if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
+
+        $order_id = (int) ($_POST['order_id'] ?? 0);
+        $back     = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
+
+        if (!$order_id || !function_exists('as_get_scheduled_actions')) {
+            wp_safe_redirect($back);
+            exit;
+        }
+
+        $order   = wc_get_order($order_id);
+        $mobile  = '';
+        if ($order instanceof WC_Abstract_Order) {
+            try {
+                $mobile = Payamito_Scheduler::normalize_phone($order->get_billing_phone());
+            } catch (\InvalidArgumentException $e) {
+                $mobile = $order->get_billing_phone();
+            }
+        }
+
+        $actions = as_get_scheduled_actions([
+            'hook'     => 'payamito_execute_scheduled_sms',
+            'status'   => ActionScheduler_Store::STATUS_PENDING,
+            'group'    => 'payamito-sms',
+            'per_page' => 100,
+        ]);
+
+        $store = ActionScheduler_Store::instance();
+        foreach ($actions as $action_id => $action) {
+            $args = $action->get_args();
+            if ((int) ($args['order_id'] ?? 0) !== $order_id) continue;
+
+            $send_type = $args['send_type'] ?? 'pattern';
+            Payamito_Logger::insert([
+                'order_id'     => $order_id,
+                'mobile'       => $mobile,
+                'pattern'      => $send_type === 'text' ? 'text' : ($args['pattern_code'] ?? ''),
+                'vars'         => $send_type === 'text' ? ($args['text_body'] ?? '') : ($args['vars_str'] ?? ''),
+                'status'       => 'cancelled',
+                'response'     => null,
+                'attempt'      => (int) ($args['attempt'] ?? 1),
+                'scheduled_at' => $args['scheduled_at'] ?? current_time('mysql'),
+                'sent_at'      => null,
+            ]);
+
+            try {
+                $store->cancel_action($action_id);
+            } catch (Exception $e) {
+                error_log('[Payamito] Cancel all - failed for action ' . $action_id . ': ' . $e->getMessage());
             }
         }
 

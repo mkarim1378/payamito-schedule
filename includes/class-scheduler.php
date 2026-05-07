@@ -16,10 +16,15 @@ class Payamito_Scheduler {
     private const AS_GROUP = 'payamito-sms';
 
     public function __construct() {
-        add_action('woocommerce_order_status_changed', [$this, 'on_status_change'],    10, 4);
-        add_action('woocommerce_order_status_changed', [$this, 'prevent_cancellation'], 20, 4);
-        add_action('woocommerce_new_order',            [$this, 'on_new_order'],         10, 2);
-        add_action('payamito_execute_scheduled_sms',   [$this, 'execute'],              10, 7);
+        add_action('woocommerce_order_status_changed',    [$this, 'on_status_change'],      10, 4);
+        add_action('woocommerce_order_status_changed',    [$this, 'prevent_cancellation'],  20, 4);
+        add_action('woocommerce_new_order',               [$this, 'on_new_order'],          10, 2);
+        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 7);
+        // Cancel scheduled SMS when an order is trashed or permanently deleted
+        add_action('wp_trash_post',                       [$this, 'on_order_removed'],      10, 1);
+        add_action('before_delete_post',                  [$this, 'on_order_removed'],      10, 1);
+        add_action('woocommerce_trash_order',             [self::class, 'cancel_scheduled_for_order'], 10, 1);
+        add_action('woocommerce_before_delete_order',     [self::class, 'cancel_scheduled_for_order'], 10, 1);
     }
 
     public function on_new_order(int $order_id, $order): void {
@@ -28,6 +33,30 @@ class Payamito_Scheduler {
         }
         if (!$order instanceof WC_Abstract_Order) return;
         $this->on_status_change($order_id, '', $order->get_status(), $order);
+    }
+
+    public function on_order_removed(int $post_id): void {
+        if (get_post_type($post_id) !== 'shop_order') return;
+        self::cancel_scheduled_for_order($post_id);
+    }
+
+    public static function cancel_scheduled_for_order(int $order_id): void {
+        if (!function_exists('as_get_scheduled_actions')) return;
+        $actions = as_get_scheduled_actions([
+            'hook'     => 'payamito_execute_scheduled_sms',
+            'status'   => ActionScheduler_Store::STATUS_PENDING,
+            'group'    => self::AS_GROUP,
+            'per_page' => 100,
+        ]);
+        $store = ActionScheduler_Store::instance();
+        foreach ($actions as $action_id => $action) {
+            if ((int) ($action->get_args()['order_id'] ?? 0) !== $order_id) continue;
+            try {
+                $store->cancel_action($action_id);
+            } catch (Exception $e) {
+                error_log('[Payamito] Failed to cancel action ' . $action_id . ': ' . $e->getMessage());
+            }
+        }
     }
 
     public function prevent_cancellation(int $order_id, string $from, string $to, $order): void {
@@ -80,6 +109,7 @@ class Payamito_Scheduler {
     ): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
+        if (in_array($order->get_status(), ['trash'], true)) return;
 
         $phone = $order->get_billing_phone();
         if (empty($phone)) return;
