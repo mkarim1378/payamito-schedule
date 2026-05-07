@@ -20,7 +20,6 @@ class Payamito_Log_List_Table extends WP_List_Table {
             'id'           => '#',
             'order_id'     => 'سفارش',
             'mobile'       => 'شماره',
-            'pattern'      => 'پترن',
             'status'       => 'وضعیت',
             'attempt'      => 'تلاش',
             'scheduled_at' => 'زمان‌بندی‌شده',
@@ -33,10 +32,11 @@ class Payamito_Log_List_Table extends WP_List_Table {
         $base_url = admin_url('admin.php?page=payamito-scheduler-log');
 
         $statuses = [
-            ''          => 'همه',
-            'sent'      => 'ارسال‌شده',
-            'failed'    => 'ناموفق',
-            'cancelled' => 'لغوشده',
+            ''           => 'همه',
+            'sent'       => 'ارسال‌شده',
+            'failed'     => 'ناموفق',
+            'cancelled'  => 'لغوشده',
+            'superseded' => 'جایگزین‌شده',
         ];
 
         $views = [];
@@ -92,9 +92,10 @@ class Payamito_Log_List_Table extends WP_List_Table {
 
     public function column_status($item): string {
         $map = [
-            'sent'      => '<span style="color:#2ea44f;font-weight:bold">✓ ارسال‌شده</span>',
-            'failed'    => '<span style="color:#cf222e;font-weight:bold">✗ ناموفق</span>',
-            'cancelled' => '<span style="color:#6e7781">⊘ لغوشده</span>',
+            'sent'       => '<span style="color:#2ea44f;font-weight:bold">✓ ارسال‌شده</span>',
+            'failed'     => '<span style="color:#cf222e;font-weight:bold">✗ ناموفق</span>',
+            'cancelled'  => '<span style="color:#6e7781">⊘ لغوشده</span>',
+            'superseded' => '<span style="color:#6e40c9">🔄 جایگزین شد</span>',
         ];
         return $map[$item['status']] ?? esc_html($item['status']);
     }
