@@ -3,6 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 class Payamito_Scheduler {
 
+    private static bool $reverting_cancellation = false;
+
     private const RETRY_DELAYS = [
         1 => 5  * MINUTE_IN_SECONDS,
         2 => 30 * MINUTE_IN_SECONDS,
@@ -33,10 +35,13 @@ class Payamito_Scheduler {
         $credentials = get_option('payamito_credentials', []);
         if (empty($credentials['prevent_cancellation'])) return;
 
+        self::$reverting_cancellation = true;
         $order->update_status('pending', '[پیامیتو] لغو سفارش بلوکه شد — وضعیت به «در انتظار پرداخت» برگشت.');
+        self::$reverting_cancellation = false;
     }
 
     public function on_status_change(int $order_id, string $from_status, string $to_status, $order): void {
+        if (self::$reverting_cancellation) return;
         $rules           = get_option('payamito_schedule_rules', []);
         $prefixed_status = 'wc-' . $to_status;
 

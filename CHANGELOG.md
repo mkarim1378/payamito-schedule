@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.12.0] - 2026-05-07
+
+### Fixed
+- حلقه بی‌نهایت SMS هنگام فعال بودن «جلوگیری از لغو سفارش» — وقتی `prevent_cancellation` وضعیت را به «در انتظار پرداخت» برمی‌گرداند، `on_status_change` دیگر SMS جدید زمان‌بندی نمی‌کند و حلقه WooCommerce cancel → revert → SMS قطع می‌شود
+
+---
+
 ## [2.11.0] - 2026-05-06
 
 ### Fixed
