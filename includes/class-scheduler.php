@@ -174,17 +174,39 @@ class Payamito_Scheduler {
             $credentials['password'] ?? ''
         );
 
+        // حالت تست: redirect به شماره‌های تست به جای شماره واقعی مشتری
+        $test_targets = [];
+        $is_test_mode = !empty($credentials['test_mode']);
+        if ($is_test_mode) {
+            foreach (explode("\n", $credentials['test_phones'] ?? '') as $tp) {
+                $tp = trim($tp);
+                if ($tp === '') continue;
+                try {
+                    $test_targets[] = self::normalize_phone($tp);
+                } catch (\InvalidArgumentException $e) {
+                    // شماره تست نامعتبر — رد می‌شود
+                }
+            }
+        }
+        $send_targets = !empty($test_targets) ? $test_targets : [$phone];
+
         if ($send_type === 'text') {
             $resolved_text = $this->resolve_text($text_body, $order);
             $from          = $credentials['from_number'] ?? '';
-            $result        = $api->send_smart_sms($phone, $resolved_text, $from);
             $log_pattern   = 'text';
             $log_vars      = $text_body;
         } else {
             $sms_args    = $this->resolve_vars($vars_str, $order);
-            $result      = $api->send_pattern_sms($phone, $pattern_code, $sms_args);
             $log_pattern = $pattern_code;
             $log_vars    = $vars_str;
+        }
+
+        $result = null;
+        foreach ($send_targets as $target) {
+            $r = $send_type === 'text'
+                ? $api->send_smart_sms($target, $resolved_text, $from)
+                : $api->send_pattern_sms($target, $pattern_code, $sms_args);
+            if ($r !== null) $result = $r;
         }
 
         $success = $result !== null;
@@ -207,8 +229,9 @@ class Payamito_Scheduler {
         if ($success) {
             $response_str = is_array($result) ? wp_json_encode($result) : (is_object($result) ? print_r($result, true) : (string) $result);
             $label        = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
+            $test_note    = $is_test_mode ? sprintf(' [حالت تست — به %s]', implode('، ', array_map([$this, 'mask_phone'], $send_targets))) : '';
             $order->add_order_note(
-                sprintf('[پیامیتو] پیامک %s به شماره %s ارسال شد. (پاسخ: %s)', $label, $masked, $response_str),
+                sprintf('[پیامیتو] پیامک %s به شماره %s ارسال شد.%s (پاسخ: %s)', $label, $masked, $test_note, $response_str),
                 false,
                 false
             );

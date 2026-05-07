@@ -8,6 +8,7 @@ class Payamito_Admin {
     public function __construct() {
         add_action('admin_menu',                        [$this, 'add_menu']);
         add_action('admin_init',                        [$this, 'handle_submission']);
+        add_action('admin_notices',                     [$this, 'test_mode_notice']);
         add_action('admin_enqueue_scripts',             [$this, 'enqueue_scripts']);
         add_action('add_meta_boxes',                    [$this, 'register_meta_box']);
         add_action('admin_post_payamito_resend_sms',      [$this, 'handle_resend']);
@@ -448,6 +449,20 @@ class Payamito_Admin {
         exit;
     }
 
+    public function test_mode_notice(): void {
+        $credentials = get_option('payamito_credentials', []);
+        if (empty($credentials['test_mode'])) return;
+
+        $phones = array_filter(array_map('trim', explode("\n", $credentials['test_phones'] ?? '')));
+        $list   = !empty($phones) ? implode('، ', $phones) : '(بدون شماره تست — همه پیامک‌ها ارسال می‌شوند)';
+        ?>
+        <div class="notice notice-warning" style="border-right:4px solid #b45309;">
+            <p><strong>⚠️ حالت تست پیامیتو فعال است</strong> — پیامک‌ها به جای مشتریان، به این شماره‌ها ارسال می‌شوند: <code><?php echo esc_html($list); ?></code>
+            &nbsp;|&nbsp; <a href="<?php echo esc_url(admin_url('admin.php?page=payamito-scheduler')); ?>">غیرفعال کردن</a></p>
+        </div>
+        <?php
+    }
+
     public function add_menu(): void {
         $this->page_hooks[] = add_menu_page(
             'زمان‌بندی پیامک',
@@ -701,6 +716,23 @@ class Payamito_Admin {
                             <p class="description">لاگ‌های قدیمی‌تر از این تعداد روز به صورت خودکار حذف می‌شوند.</p>
                         </td>
                     </tr>
+                    <tr>
+                        <th><label>حالت تست:</label></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="credentials[test_mode]" value="1" <?php checked(!empty($credentials['test_mode'])); ?>>
+                                فعال — پیامک‌ها فقط به شماره‌های تست ارسال شوند
+                            </label>
+                            <p class="description" style="color:#b45309;">⚠️ وقتی فعال است، هیچ مشتری‌ای پیامک دریافت نمی‌کند.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label>شماره‌های تست:</label></th>
+                        <td>
+                            <textarea name="credentials[test_phones]" rows="3" class="regular-text" placeholder="09120000000&#10;09130000000"><?php echo esc_textarea($credentials['test_phones'] ?? ''); ?></textarea>
+                            <p class="description">یک شماره در هر خط. در حالت تست، همه پیامک‌ها به این شماره‌ها redirect می‌شوند.</p>
+                        </td>
+                    </tr>
                 </table>
                 <button type="submit" name="save_credentials" class="button button-primary">ذخیره اطلاعات</button>
             </form>
@@ -838,6 +870,8 @@ class Payamito_Admin {
             'from_number'           => sanitize_text_field($raw['from_number']  ?? ''),
             'prevent_cancellation'  => !empty($raw['prevent_cancellation']) ? 1 : 0,
             'log_retention_days'    => max(1, intval($raw['log_retention_days'] ?? 90)),
+            'test_mode'             => !empty($raw['test_mode']) ? 1 : 0,
+            'test_phones'           => sanitize_textarea_field($raw['test_phones'] ?? ''),
         ]);
         add_settings_error('payamito_msg', 'payamito_msg', 'اطلاعات پنل با موفقیت ذخیره شد.', 'success');
     }
