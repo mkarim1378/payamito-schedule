@@ -7,7 +7,8 @@
       "Bash(php -l d:/Github/payamito-schedule/assets/js/admin.js)",
       "Bash(php -l d:/Github/payamito-schedule/payamito-schedule.php)",
       "Bash(cat)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(php -l \"d:\\\\Github\\\\payamito-schedule\\\\includes\\\\class-scheduler.php\")"
     ]
   }
 }

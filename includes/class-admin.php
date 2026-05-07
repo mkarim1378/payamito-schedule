@@ -52,6 +52,15 @@ class Payamito_Admin {
         // ── پیامک‌های در صف ──────────────────────────────────────────
         if (!empty($scheduled)) :
             echo '<p style="font-weight:600;margin:0 0 6px;font-size:12px;color:#555;">⏳ برنامه‌ریزی شده:</p>';
+            if (count($scheduled) > 1) : ?>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-bottom:8px;">
+                    <?php wp_nonce_field('payamito_cancel_all_sms', 'payamito_cancel_all_nonce'); ?>
+                    <input type="hidden" name="action"   value="payamito_cancel_all_sms">
+                    <input type="hidden" name="order_id" value="<?php echo (int) $order_id; ?>">
+                    <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;width:100%;"
+                        onclick="return confirm('همه پیامک‌های زمان‌بندی‌شده لغو شوند؟')">⊘ لغو همه پیامک‌ها (<?php echo count($scheduled); ?>)</button>
+                </form>
+            <?php endif;
             foreach ($scheduled as $action_id => $action) :
                 $args      = $action->get_args();
                 $send_type = $args['send_type'] ?? 'pattern';
@@ -59,7 +68,7 @@ class Payamito_Admin {
                 $label     = $is_text ? 'متن ثابت' : ('پترن ' . ($args['pattern_code'] ?? ''));
                 $attempt   = (int) ($args['attempt'] ?? 1);
                 $date      = $action->get_schedule()->get_date();
-                $time_str  = $date ? $date->format('Y-m-d H:i') : '—';
+                $time_str  = $date ? self::jalali_from_utc($date) : '—';
                 $raw_text     = $is_text ? ($args['text_body'] ?? '') : '';
                 $display_text = ($raw_text && $order instanceof WC_Abstract_Order)
                     ? str_replace(
@@ -103,16 +112,7 @@ class Payamito_Admin {
                         </form>
                     </div>
                 </div>
-            <?php endforeach; ?>
-            <?php if (count($scheduled) > 1) : ?>
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:4px;">
-                    <?php wp_nonce_field('payamito_cancel_all_sms', 'payamito_cancel_all_nonce'); ?>
-                    <input type="hidden" name="action"   value="payamito_cancel_all_sms">
-                    <input type="hidden" name="order_id" value="<?php echo (int) $order_id; ?>">
-                    <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;width:100%;"
-                        onclick="return confirm('همه پیامک‌های زمان‌بندی‌شده لغو شوند؟')">⊘ لغو همه پیامک‌ها (<?php echo count($scheduled); ?>)</button>
-                </form>
-            <?php endif;
+            <?php endforeach;
         endif;
 
         // ── تاریخچه ارسال ────────────────────────────────────────────
@@ -156,9 +156,9 @@ class Payamito_Admin {
                         <div style="color:#333;margin-bottom:4px;line-height:1.5;white-space:pre-wrap;"><?php echo esc_html($display_entry_text); ?></div>
                     <?php endif; ?>
                     <div style="color:#666;">📱 <?php echo esc_html($masked); ?></div>
-                    <div style="color:#666;">🕐 <?php echo esc_html($entry['scheduled_at']); ?></div>
+                    <div style="color:#666;">🕐 <?php echo esc_html(self::jalali($entry['scheduled_at'])); ?></div>
                     <?php if ($entry['sent_at']) : ?>
-                        <div style="color:#2ea44f;">✅ <?php echo esc_html($entry['sent_at']); ?></div>
+                        <div style="color:#2ea44f;">✅ <?php echo esc_html(self::jalali($entry['sent_at'])); ?></div>
                     <?php endif; ?>
                     <?php if ($entry['status'] === 'failed') : ?>
                         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
@@ -171,6 +171,44 @@ class Payamito_Admin {
                 </div>
             <?php endforeach;
         endif;
+    }
+
+    private static function jalali(string $mysql_dt, bool $with_time = true): string {
+        $tz = wp_timezone();
+        $dt = new \DateTime($mysql_dt, $tz);
+        [$gy, $gm, $gd] = [(int) $dt->format('Y'), (int) $dt->format('n'), (int) $dt->format('j')];
+
+        $g  = $gy - 1600;
+        $gm = $gm - 1;
+        $gd = $gd - 1;
+        $g_d_no = 365 * $g + (int)(($g + 3) / 4) - (int)(($g + 99) / 100) + (int)(($g + 399) / 400);
+        $gm_d   = [31,28,31,30,31,30,31,31,30,31,30,31];
+        for ($i = 0; $i < $gm; $i++) $g_d_no += $gm_d[$i];
+        if ($gm > 1 && (($gy % 4 === 0 && $gy % 100 !== 0) || $gy % 400 === 0)) $g_d_no++;
+        $g_d_no += $gd;
+
+        $j_d_no = $g_d_no - 79;
+        $j_np   = (int) ($j_d_no / 12053);
+        $j_d_no %= 12053;
+        $jy     = 979 + 33 * $j_np + 4 * (int) ($j_d_no / 1461);
+        $j_d_no %= 1461;
+        if ($j_d_no >= 366) {
+            $jy    += (int) (($j_d_no - 1) / 365);
+            $j_d_no = ($j_d_no - 1) % 365;
+        }
+        $jm_d = [31,31,31,31,31,31,30,30,30,30,30,29];
+        $jm   = 0;
+        for (; $jm < 11 && $j_d_no >= $jm_d[$jm]; $jm++) $j_d_no -= $jm_d[$jm];
+        $jm_names = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+        $result = ($j_d_no + 1) . ' ' . $jm_names[$jm] . ' ' . $jy;
+        if ($with_time) $result .= ' ساعت ' . $dt->format('H:i');
+        return $result;
+    }
+
+    private static function jalali_from_utc(\DateTimeInterface $utc_dt, bool $with_time = true): string {
+        $dt = \DateTime::createFromInterface($utc_dt);
+        $dt->setTimezone(wp_timezone());
+        return self::jalali($dt->format('Y-m-d H:i:s'), $with_time);
     }
 
     private function get_pending_actions_for_order(int $order_id): array {
