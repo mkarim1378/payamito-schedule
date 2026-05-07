@@ -94,13 +94,18 @@ class Payamito_Admin {
                     <div style="display:flex;gap:6px;margin-top:6px;">
                         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                             <?php wp_nonce_field('payamito_send_now', 'payamito_send_now_nonce'); ?>
-                            <input type="hidden" name="action"        value="payamito_send_now">
-                            <input type="hidden" name="action_id"     value="<?php echo (int) $action_id; ?>">
-                            <input type="hidden" name="order_id"      value="<?php echo (int) ($args['order_id'] ?? 0); ?>">
-                            <input type="hidden" name="pattern_code"  value="<?php echo esc_attr($args['pattern_code'] ?? ''); ?>">
-                            <input type="hidden" name="vars_str"      value="<?php echo esc_attr($args['vars_str'] ?? ''); ?>">
-                            <input type="hidden" name="send_type"     value="<?php echo esc_attr($args['send_type'] ?? 'pattern'); ?>">
-                            <input type="hidden" name="text_body"     value="<?php echo esc_attr($args['text_body'] ?? ''); ?>">
+                            <input type="hidden" name="action"               value="payamito_send_now">
+                            <input type="hidden" name="action_id"            value="<?php echo (int) $action_id; ?>">
+                            <input type="hidden" name="order_id"             value="<?php echo (int) ($args['order_id'] ?? 0); ?>">
+                            <input type="hidden" name="pattern_code"         value="<?php echo esc_attr($args['pattern_code'] ?? ''); ?>">
+                            <input type="hidden" name="vars_str"             value="<?php echo esc_attr($args['vars_str'] ?? ''); ?>">
+                            <input type="hidden" name="send_type"            value="<?php echo esc_attr($args['send_type'] ?? 'pattern'); ?>">
+                            <input type="hidden" name="text_body"            value="<?php echo esc_attr($args['text_body'] ?? ''); ?>">
+                            <input type="hidden" name="coupon_enabled"       value="<?php echo (int) ($args['coupon_enabled'] ?? 0); ?>">
+                            <input type="hidden" name="coupon_amount"        value="<?php echo esc_attr($args['coupon_amount'] ?? 0); ?>">
+                            <input type="hidden" name="coupon_type"          value="<?php echo esc_attr($args['coupon_type'] ?? 'percent'); ?>">
+                            <input type="hidden" name="coupon_expiry_hours"  value="<?php echo (int) ($args['coupon_expiry_hours'] ?? 24); ?>">
+                            <input type="hidden" name="coupon_mode"          value="<?php echo esc_attr($args['coupon_mode'] ?? 'code'); ?>">
                             <button type="submit" class="button button-small button-primary"
                                 onclick="return confirm('پیامک همین الان ارسال شود؟')">⚡ ارسال فوری</button>
                         </form>
@@ -341,13 +346,18 @@ class Payamito_Admin {
         check_admin_referer('payamito_send_now', 'payamito_send_now_nonce');
         if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
 
-        $back      = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
-        $action_id = (int)    ($_POST['action_id']    ?? 0);
-        $order_id  = (int)    ($_POST['order_id']     ?? 0);
-        $send_type = sanitize_text_field($_POST['send_type']    ?? 'pattern');
-        $text_body = sanitize_textarea_field($_POST['text_body'] ?? '');
-        $pat_code  = sanitize_text_field($_POST['pattern_code'] ?? '');
-        $vars_str  = sanitize_textarea_field($_POST['vars_str'] ?? '');
+        $back                = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
+        $action_id           = (int)    ($_POST['action_id']           ?? 0);
+        $order_id            = (int)    ($_POST['order_id']            ?? 0);
+        $send_type           = sanitize_text_field($_POST['send_type']           ?? 'pattern');
+        $text_body           = sanitize_textarea_field($_POST['text_body']       ?? '');
+        $pat_code            = sanitize_text_field($_POST['pattern_code']        ?? '');
+        $vars_str            = sanitize_textarea_field($_POST['vars_str']        ?? '');
+        $coupon_enabled      = (int)    ($_POST['coupon_enabled']      ?? 0);
+        $coupon_amount       = max(0, (float) ($_POST['coupon_amount'] ?? 0));
+        $coupon_type         = in_array($_POST['coupon_type'] ?? '', ['percent', 'fixed'], true) ? $_POST['coupon_type'] : 'percent';
+        $coupon_expiry_hours = max(1, (int) ($_POST['coupon_expiry_hours'] ?? 24));
+        $coupon_mode         = in_array($_POST['coupon_mode'] ?? '', ['code', 'payment'], true) ? $_POST['coupon_mode'] : 'code';
 
         if (!$order_id) {
             wp_safe_redirect($back);
@@ -362,7 +372,7 @@ class Payamito_Admin {
             }
         }
 
-        do_action('payamito_execute_scheduled_sms', $order_id, $pat_code, $vars_str, null, 1, $send_type, $text_body);
+        do_action('payamito_execute_scheduled_sms', $order_id, $pat_code, $vars_str, null, 1, $send_type, $text_body, $coupon_enabled, $coupon_amount, $coupon_type, $coupon_expiry_hours, $coupon_mode);
 
         wp_safe_redirect($back);
         exit;
@@ -829,7 +839,8 @@ class Payamito_Admin {
                         فرمت: <code>key:value;key2:value2</code> —
                         شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
                         <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>,
-                        <code>{product_names}</code>, <code>{product_links}</code>, <code>{payment_link}</code>
+                        <code>{product_names}</code>, <code>{product_links}</code>, <code>{payment_link}</code>,
+                        <code>{coupon_code}</code>
                     </p>
                 </div>
             </div>
@@ -839,8 +850,48 @@ class Payamito_Admin {
                 <p class="description">
                     شورت‌کدها: <code>{billing_first_name}</code>, <code>{billing_last_name}</code>,
                     <code>{order_id}</code>, <code>{order_total}</code>, <code>{billing_phone}</code>,
-                    <code>{product_names}</code>, <code>{product_links}</code>
+                    <code>{product_names}</code>, <code>{product_links}</code>, <code>{payment_link}</code>,
+                    <code>{coupon_code}</code>
                 </p>
+            </div>
+            <div class="coupon-section" style="margin-top:10px;border-top:1px solid #eee;padding-top:10px;">
+                <label>
+                    <input type="checkbox" name="rules[<?php echo $index; ?>][coupon_enabled]" value="1" class="coupon-toggle"
+                        <?php checked(!empty($rule['coupon_enabled'])); ?>>
+                    <strong>ارسال کد تخفیف اتوماتیک</strong>
+                </label>
+                <div class="coupon-fields" style="margin-top:10px;<?php echo empty($rule['coupon_enabled']) ? 'display:none;' : ''; ?>">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <tr>
+                            <td style="padding:4px 8px 4px 0;width:130px;"><label>مقدار تخفیف:</label></td>
+                            <td>
+                                <input type="number" name="rules[<?php echo $index; ?>][coupon_amount]" value="<?php echo esc_attr($rule['coupon_amount'] ?? 0); ?>" min="0" step="any" style="width:80px;">
+                                <select name="rules[<?php echo $index; ?>][coupon_type]">
+                                    <option value="percent" <?php selected($rule['coupon_type'] ?? 'percent', 'percent'); ?>>درصد (%)</option>
+                                    <option value="fixed"   <?php selected($rule['coupon_type'] ?? '',        'fixed'); ?>>مبلغ ثابت (تومان)</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 8px 4px 0;"><label>انقضا (ساعت):</label></td>
+                            <td><input type="number" name="rules[<?php echo $index; ?>][coupon_expiry_hours]" value="<?php echo esc_attr($rule['coupon_expiry_hours'] ?? 24); ?>" min="1" style="width:80px;"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 8px 4px 0;vertical-align:top;padding-top:8px;"><label>حالت کد تخفیف:</label></td>
+                            <td style="padding-top:8px;">
+                                <label style="display:block;margin-bottom:4px;">
+                                    <input type="radio" name="rules[<?php echo $index; ?>][coupon_mode]" value="code" <?php checked($rule['coupon_mode'] ?? 'code', 'code'); ?>>
+                                    کد در متن پیامک — از شورت‌کد <code>{coupon_code}</code> استفاده کنید
+                                </label>
+                                <label style="display:block;">
+                                    <input type="radio" name="rules[<?php echo $index; ?>][coupon_mode]" value="payment" <?php checked($rule['coupon_mode'] ?? '', 'payment'); ?>>
+                                    اعمال روی سفارش (لینک پرداخت به‌روزرسانی می‌شود)
+                                </label>
+                                <p class="description" style="margin-top:4px;">کد: <code>carno{order_id}</code> — یکبار مصرف، فقط برای ایمیل مشتری</p>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
             </div>
             <button type="button" class="button remove-row" style="color:#a00;border-color:#a00;margin-top:10px;">حذف این قانون</button>
         </div>
@@ -916,13 +967,18 @@ class Payamito_Admin {
 
     private function sanitize_rule(array $r): array {
         return [
-            'status'     => sanitize_text_field($r['status']       ?? ''),
-            'delay_val'  => max(0, (int) ($r['delay_val']          ?? 0)),
-            'delay_unit' => sanitize_text_field($r['delay_unit']   ?? 'minutes'),
-            'send_type'  => in_array($r['send_type'] ?? '', ['pattern', 'text'], true) ? $r['send_type'] : 'pattern',
-            'pattern'    => sanitize_text_field($r['pattern']      ?? ''),
-            'vars'       => sanitize_textarea_field($r['vars']     ?? ''),
-            'text_body'  => sanitize_textarea_field($r['text_body'] ?? ''),
+            'status'              => sanitize_text_field($r['status']                          ?? ''),
+            'delay_val'           => max(0, (int) ($r['delay_val']                             ?? 0)),
+            'delay_unit'          => sanitize_text_field($r['delay_unit']                      ?? 'minutes'),
+            'send_type'           => in_array($r['send_type'] ?? '', ['pattern', 'text'], true) ? $r['send_type'] : 'pattern',
+            'pattern'             => sanitize_text_field($r['pattern']                         ?? ''),
+            'vars'                => sanitize_textarea_field($r['vars']                        ?? ''),
+            'text_body'           => sanitize_textarea_field($r['text_body']                   ?? ''),
+            'coupon_enabled'      => !empty($r['coupon_enabled']) ? 1 : 0,
+            'coupon_amount'       => max(0, (float) ($r['coupon_amount']                       ?? 0)),
+            'coupon_type'         => in_array($r['coupon_type'] ?? '', ['percent', 'fixed'], true) ? $r['coupon_type'] : 'percent',
+            'coupon_expiry_hours' => max(1, (int) ($r['coupon_expiry_hours']                   ?? 24)),
+            'coupon_mode'         => in_array($r['coupon_mode'] ?? '', ['code', 'payment'], true) ? $r['coupon_mode'] : 'code',
         ];
     }
 }

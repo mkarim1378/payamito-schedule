@@ -2,7 +2,7 @@
 /**
  * Plugin Name: زمان‌بندی پیامک پیامیتو
  * Description: افزونه جانبی برای ارسال زمان‌بندی شده پیامک‌های ووکامرس با پترن (خط خدماتی).
- * Version: 2.18.0
+ * Version: 2.19.0
  * Author: آکادمی کارنو
  * Author-URI: https://sepehralimohammadi.com
  * Requires Plugins: woocommerce
@@ -11,7 +11,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('PAYAMITO_SCHEDULE_VERSION', '2.18.0');
+define('PAYAMITO_SCHEDULE_VERSION', '2.19.0');
 define('PAYAMITO_SCHEDULE_DIR',     plugin_dir_path(__FILE__));
 define('PAYAMITO_SCHEDULE_URL',     plugin_dir_url(__FILE__));
 
@@ -75,6 +75,23 @@ add_action('payamito_weekly_log_cleanup', function () {
     $credentials = get_option('payamito_credentials', []);
     $days        = max(1, (int) ($credentials['log_retention_days'] ?? 90));
     Payamito_Logger::purge_old($days);
+
+    // حذف کوپن‌های منقضی‌شده ایجادشده توسط پیامیتو
+    $expired = get_posts([
+        'post_type'      => 'shop_coupon',
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'meta_key'       => '_payamito_coupon',
+        'meta_value'     => '1',
+        'date_query'     => [],
+        'fields'         => 'ids',
+    ]);
+    foreach ($expired as $coupon_id) {
+        $expiry = get_post_meta($coupon_id, 'date_expires', true);
+        if ($expiry && (int) $expiry < time()) {
+            wp_delete_post($coupon_id, true);
+        }
+    }
 });
 
 new Payamito_Admin();

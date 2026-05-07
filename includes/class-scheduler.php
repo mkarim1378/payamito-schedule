@@ -19,7 +19,7 @@ class Payamito_Scheduler {
         add_action('woocommerce_order_status_changed',    [$this, 'on_status_change'],      10, 4);
         add_action('woocommerce_order_status_changed',    [$this, 'prevent_cancellation'],  20, 4);
         add_action('woocommerce_new_order',               [$this, 'on_new_order'],          10, 2);
-        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 7);
+        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 12);
         // Cancel scheduled SMS when an order is trashed or permanently deleted
         add_action('wp_trash_post',                       [$this, 'on_order_removed'],      10, 1);
         add_action('before_delete_post',                  [$this, 'on_order_removed'],      10, 1);
@@ -111,13 +111,18 @@ class Payamito_Scheduler {
             $run_at = time() + $delay;
 
             $hook_args = [
-                'order_id'     => $order_id,
-                'pattern_code' => $rule['pattern']   ?? '',
-                'vars_str'     => $rule['vars']       ?? '',
-                'scheduled_at' => date('Y-m-d H:i:s', $run_at),
-                'attempt'      => 1,
-                'send_type'    => $rule['send_type']  ?? 'pattern',
-                'text_body'    => $rule['text_body']  ?? '',
+                'order_id'            => $order_id,
+                'pattern_code'        => $rule['pattern']              ?? '',
+                'vars_str'            => $rule['vars']                 ?? '',
+                'scheduled_at'        => date('Y-m-d H:i:s', $run_at),
+                'attempt'             => 1,
+                'send_type'           => $rule['send_type']            ?? 'pattern',
+                'text_body'           => $rule['text_body']            ?? '',
+                'coupon_enabled'      => (int)   ($rule['coupon_enabled']      ?? 0),
+                'coupon_amount'       => (float) ($rule['coupon_amount']       ?? 0),
+                'coupon_type'         => $rule['coupon_type']                  ?? 'percent',
+                'coupon_expiry_hours' => (int)   ($rule['coupon_expiry_hours'] ?? 24),
+                'coupon_mode'         => $rule['coupon_mode']                  ?? 'code',
             ];
 
             if (as_has_scheduled_action('payamito_execute_scheduled_sms', $hook_args, self::AS_GROUP)) {
@@ -135,7 +140,12 @@ class Payamito_Scheduler {
         ?string $scheduled_at = null,
         int $attempt = 1,
         string $send_type = 'pattern',
-        string $text_body = ''
+        string $text_body = '',
+        int $coupon_enabled = 0,
+        float $coupon_amount = 0,
+        string $coupon_type = 'percent',
+        int $coupon_expiry_hours = 24,
+        string $coupon_mode = 'code'
     ): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
@@ -190,11 +200,29 @@ class Payamito_Scheduler {
         }
         $send_targets = !empty($test_targets) ? $test_targets : [$phone];
 
+        // ── ایجاد کد تخفیف (اگر فعال باشد) ─────────────────────────
+        $coupon_code = '';
+        if ($coupon_enabled && $coupon_amount > 0) {
+            $coupon_code = $this->create_or_get_coupon($order_id, $coupon_amount, $coupon_type, $coupon_expiry_hours, $order);
+            if ($coupon_code && $coupon_mode === 'payment') {
+                if (!in_array($coupon_code, $order->get_coupon_codes(), true)) {
+                    $applied = $order->apply_coupon($coupon_code);
+                    if (!is_wp_error($applied)) {
+                        $order->calculate_totals();
+                        $order->save();
+                    }
+                }
+            }
+        }
+
         if ($send_type === 'text') {
             $resolved_text = $this->resolve_text($text_body, $order);
-            $from          = $credentials['from_number'] ?? '';
-            $log_pattern   = 'text';
-            $log_vars      = $text_body;
+            if ($coupon_code) {
+                $resolved_text = str_replace('{coupon_code}', $coupon_code, $resolved_text);
+            }
+            $from        = $credentials['from_number'] ?? '';
+            $log_pattern = 'text';
+            $log_vars    = $text_body;
         } else {
             $sms_args    = $this->resolve_vars($vars_str, $order);
             $log_pattern = $pattern_code;
@@ -241,13 +269,18 @@ class Payamito_Scheduler {
         if ($attempt < self::MAX_ATTEMPTS) {
             $delay           = self::RETRY_DELAYS[$attempt];
             $retry_hook_args = [
-                'order_id'     => $order_id,
-                'pattern_code' => $pattern_code,
-                'vars_str'     => $vars_str,
-                'scheduled_at' => $scheduled_at,
-                'attempt'      => $attempt + 1,
-                'send_type'    => $send_type,
-                'text_body'    => $text_body,
+                'order_id'            => $order_id,
+                'pattern_code'        => $pattern_code,
+                'vars_str'            => $vars_str,
+                'scheduled_at'        => $scheduled_at,
+                'attempt'             => $attempt + 1,
+                'send_type'           => $send_type,
+                'text_body'           => $text_body,
+                'coupon_enabled'      => $coupon_enabled,
+                'coupon_amount'       => $coupon_amount,
+                'coupon_type'         => $coupon_type,
+                'coupon_expiry_hours' => $coupon_expiry_hours,
+                'coupon_mode'         => $coupon_mode,
             ];
             as_schedule_single_action(time() + $delay, 'payamito_execute_scheduled_sms', $retry_hook_args, self::AS_GROUP);
             $label = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
@@ -276,6 +309,36 @@ class Payamito_Scheduler {
                 false
             );
         }
+    }
+
+    private function create_or_get_coupon(
+        int $order_id,
+        float $amount,
+        string $type,
+        int $expiry_hours,
+        WC_Abstract_Order $order
+    ): string {
+        $code      = 'carno' . $order_id;
+        $coupon_id = wc_get_coupon_id_by_code($code);
+        $coupon    = $coupon_id ? new WC_Coupon($coupon_id) : new WC_Coupon();
+
+        $coupon->set_code($code);
+        $coupon->set_discount_type($type === 'fixed' ? 'fixed_cart' : 'percent');
+        $coupon->set_amount($amount);
+        $coupon->set_usage_limit(1);
+        $coupon->set_date_expires(time() + $expiry_hours * HOUR_IN_SECONDS);
+
+        $email = $order->get_billing_email();
+        if ($email) {
+            $coupon->set_email_restrictions([$email]);
+        }
+
+        $saved_id = $coupon->save();
+        if ($saved_id) {
+            update_post_meta($saved_id, '_payamito_coupon', '1');
+        }
+
+        return $code;
     }
 
     private function format_delay(int $seconds): string {
