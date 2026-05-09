@@ -151,6 +151,9 @@ class Payamito_Scheduler {
         if (!$order instanceof WC_Abstract_Order) return;
         if (in_array($order->get_status(), ['trash'], true)) return;
 
+        // سفارش رایگان: اگه قانون کد تخفیف داره ولی مبلغ سفارش صفره، پیامک ارسال نمیشه
+        if ($coupon_enabled && $coupon_amount > 0 && $order->get_total() <= 0) return;
+
         $phone = $order->get_billing_phone();
         if (empty($phone)) return;
 
@@ -326,6 +329,7 @@ class Payamito_Scheduler {
         $coupon->set_discount_type($type === 'fixed' ? 'fixed_cart' : 'percent');
         $coupon->set_amount($amount);
         $coupon->set_usage_limit(1);
+        $coupon->set_individual_use(false);
         $coupon->set_date_expires(time() + $expiry_hours * HOUR_IN_SECONDS);
 
         $email = $order->get_billing_email();
