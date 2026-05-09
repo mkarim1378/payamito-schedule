@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.22.0] - 2026-05-07
+
+### Fixed
+- پیامک‌های سفارش رایگان دیگر ارسال نمی‌شوند: `trigger_status` در hook_args ذخیره می‌شود و `execute()` در لحظه اجرا وضعیت فعلی سفارش را با وضعیت trigger مقایسه می‌کند — اگر سفارش به وضعیت دیگری رفته باشد (مثل pending→completed برای محصول رایگان)، SMS skip می‌شود
+
+---
+
 ## [2.21.0] - 2026-05-07
 
 ### Fixed

@@ -19,7 +19,7 @@ class Payamito_Scheduler {
         add_action('woocommerce_order_status_changed',    [$this, 'on_status_change'],      10, 4);
         add_action('woocommerce_order_status_changed',    [$this, 'prevent_cancellation'],  20, 4);
         add_action('woocommerce_new_order',               [$this, 'on_new_order'],          10, 2);
-        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 12);
+        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 13);
         // Cancel scheduled SMS when an order is trashed or permanently deleted
         add_action('wp_trash_post',                       [$this, 'on_order_removed'],      10, 1);
         add_action('before_delete_post',                  [$this, 'on_order_removed'],      10, 1);
@@ -123,6 +123,7 @@ class Payamito_Scheduler {
                 'coupon_type'         => $rule['coupon_type']                  ?? 'percent',
                 'coupon_expiry_hours' => (int)   ($rule['coupon_expiry_hours'] ?? 24),
                 'coupon_mode'         => $rule['coupon_mode']                  ?? 'code',
+                'trigger_status'      => $to_status,
             ];
 
             if (as_has_scheduled_action('payamito_execute_scheduled_sms', $hook_args, self::AS_GROUP)) {
@@ -145,11 +146,15 @@ class Payamito_Scheduler {
         float $coupon_amount = 0,
         string $coupon_type = 'percent',
         int $coupon_expiry_hours = 24,
-        string $coupon_mode = 'code'
+        string $coupon_mode = 'code',
+        string $trigger_status = ''
     ): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
         if (in_array($order->get_status(), ['trash'], true)) return;
+
+        // اگه وضعیت سفارش از زمان زمان‌بندی SMS تغییر کرده، این SMS منسوخ شده — ارسال نمیشه
+        if ($trigger_status !== '' && $order->get_status() !== $trigger_status) return;
 
         // سفارش رایگان: اگه قانون کد تخفیف داره ولی مبلغ سفارش صفره، پیامک ارسال نمیشه
         if ($coupon_enabled && $coupon_amount > 0 && $order->get_total() <= 0) return;
@@ -284,6 +289,7 @@ class Payamito_Scheduler {
                 'coupon_type'         => $coupon_type,
                 'coupon_expiry_hours' => $coupon_expiry_hours,
                 'coupon_mode'         => $coupon_mode,
+                'trigger_status'      => $trigger_status,
             ];
             as_schedule_single_action(time() + $delay, 'payamito_execute_scheduled_sms', $retry_hook_args, self::AS_GROUP);
             $label = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
