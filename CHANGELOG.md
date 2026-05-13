@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.24.0] - 2026-05-13
+
+### Fixed
+- پیامک‌های قوانین حذف‌شده دیگر اجرا نمی‌شوند: `execute()` در لحظه‌ی اجرا `rule_fingerprint` action را با لیست قوانین فعلی مقایسه می‌کند — اگر قانون حذف یا ویرایش شده باشد، SMS skip می‌شود (بدون نیاز به cleanup هنگام save)
+
+---
+
 ## [2.23.0] - 2026-05-13
 
 ### Fixed

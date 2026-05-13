@@ -158,6 +158,12 @@ class Payamito_Scheduler {
         // اگه وضعیت سفارش از زمان زمان‌بندی SMS تغییر کرده، این SMS منسوخ شده — ارسال نمیشه
         if ($trigger_status !== '' && $order->get_status() !== $trigger_status) return;
 
+        // اگه قانونی که این SMS رو زمانبندی کرده حذف یا ویرایش شده، ارسال نمیشه
+        if ($rule_fingerprint !== '') {
+            $valid = array_map([self::class, 'rule_fingerprint'], get_option('payamito_schedule_rules', []));
+            if (!in_array($rule_fingerprint, $valid, true)) return;
+        }
+
         // سفارش رایگان: اگه قانون کد تخفیف داره ولی مبلغ سفارش صفره، پیامک ارسال نمیشه
         if ($coupon_enabled && $coupon_amount > 0 && $order->get_total() <= 0) return;
 
