@@ -743,6 +743,16 @@ class Payamito_Admin {
                             <p class="description">یک شماره در هر خط. در حالت تست، همه پیامک‌ها به این شماره‌ها redirect می‌شوند.</p>
                         </td>
                     </tr>
+                    <tr>
+                        <th><label>حذف داده‌ها:</label></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="credentials[delete_data_on_uninstall]" value="1" <?php checked(!empty($credentials['delete_data_on_uninstall'])); ?>>
+                                هنگام حذف افزونه، تمام داده‌ها پاکسازی شوند
+                            </label>
+                            <p class="description" style="color:#cf222e;">⚠️ در صورت فعال بودن، با حذف افزونه تمام قوانین، لاگ‌ها، کوپن‌ها و تنظیمات به‌طور دائمی حذف می‌شوند.</p>
+                        </td>
+                    </tr>
                 </table>
                 <button type="submit" name="save_credentials" class="button button-primary">ذخیره اطلاعات</button>
             </form>
@@ -921,8 +931,9 @@ class Payamito_Admin {
             'from_number'           => sanitize_text_field($raw['from_number']  ?? ''),
             'prevent_cancellation'  => !empty($raw['prevent_cancellation']) ? 1 : 0,
             'log_retention_days'    => max(1, intval($raw['log_retention_days'] ?? 90)),
-            'test_mode'             => !empty($raw['test_mode']) ? 1 : 0,
-            'test_phones'           => sanitize_textarea_field($raw['test_phones'] ?? ''),
+            'test_mode'                => !empty($raw['test_mode']) ? 1 : 0,
+            'test_phones'              => sanitize_textarea_field($raw['test_phones'] ?? ''),
+            'delete_data_on_uninstall' => !empty($raw['delete_data_on_uninstall']) ? 1 : 0,
         ]);
         add_settings_error('payamito_msg', 'payamito_msg', 'اطلاعات پنل با موفقیت ذخیره شد.', 'success');
     }
