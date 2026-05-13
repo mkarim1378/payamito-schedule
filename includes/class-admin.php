@@ -962,6 +962,7 @@ class Payamito_Admin {
         ));
 
         update_option('payamito_schedule_rules', $rules);
+        Payamito_Scheduler::cleanup_stale_actions($rules);
         add_settings_error('payamito_msg', 'payamito_msg', 'قوانین با موفقیت ذخیره شدند.', 'success');
     }
 

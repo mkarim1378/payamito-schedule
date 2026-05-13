@@ -19,7 +19,7 @@ class Payamito_Scheduler {
         add_action('woocommerce_order_status_changed',    [$this, 'on_status_change'],      10, 4);
         add_action('woocommerce_order_status_changed',    [$this, 'prevent_cancellation'],  20, 4);
         add_action('woocommerce_new_order',               [$this, 'on_new_order'],          10, 2);
-        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 13);
+        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 14);
         // Cancel scheduled SMS when an order is trashed or permanently deleted
         add_action('wp_trash_post',                       [$this, 'on_order_removed'],      10, 1);
         add_action('before_delete_post',                  [$this, 'on_order_removed'],      10, 1);
@@ -124,6 +124,7 @@ class Payamito_Scheduler {
                 'coupon_expiry_hours' => (int)   ($rule['coupon_expiry_hours'] ?? 24),
                 'coupon_mode'         => $rule['coupon_mode']                  ?? 'code',
                 'trigger_status'      => $to_status,
+                'rule_fingerprint'   => self::rule_fingerprint($rule),
             ];
 
             if (as_has_scheduled_action('payamito_execute_scheduled_sms', $hook_args, self::AS_GROUP)) {
@@ -147,7 +148,8 @@ class Payamito_Scheduler {
         string $coupon_type = 'percent',
         int $coupon_expiry_hours = 24,
         string $coupon_mode = 'code',
-        string $trigger_status = ''
+        string $trigger_status = '',
+        string $rule_fingerprint = ''
     ): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
@@ -290,6 +292,7 @@ class Payamito_Scheduler {
                 'coupon_expiry_hours' => $coupon_expiry_hours,
                 'coupon_mode'         => $coupon_mode,
                 'trigger_status'      => $trigger_status,
+                'rule_fingerprint'   => $rule_fingerprint,
             ];
             as_schedule_single_action(time() + $delay, 'payamito_execute_scheduled_sms', $retry_hook_args, self::AS_GROUP);
             $label = $send_type === 'text' ? 'متن ثابت' : ('پترن ' . $pattern_code);
@@ -349,6 +352,51 @@ class Payamito_Scheduler {
         }
 
         return $code;
+    }
+
+    public static function rule_fingerprint(array $rule): string {
+        return md5(implode('|', [
+            $rule['status']              ?? '',
+            $rule['delay_val']           ?? 0,
+            $rule['delay_unit']          ?? '',
+            $rule['send_type']           ?? '',
+            $rule['pattern']             ?? '',
+            $rule['vars']                ?? '',
+            $rule['text_body']           ?? '',
+            $rule['coupon_enabled']      ?? 0,
+            $rule['coupon_amount']       ?? 0,
+            $rule['coupon_type']         ?? '',
+            $rule['coupon_expiry_hours'] ?? 0,
+            $rule['coupon_mode']         ?? '',
+        ]));
+    }
+
+    public static function cleanup_stale_actions(array $rules): void {
+        if (!function_exists('as_get_scheduled_actions')) return;
+
+        $valid = array_map([self::class, 'rule_fingerprint'], $rules);
+
+        $actions = as_get_scheduled_actions([
+            'hook'     => 'payamito_execute_scheduled_sms',
+            'status'   => ActionScheduler_Store::STATUS_PENDING,
+            'group'    => self::AS_GROUP,
+            'per_page' => 500,
+        ]);
+
+        if (empty($actions)) return;
+
+        $store = ActionScheduler_Store::instance();
+        foreach ($actions as $action_id => $action) {
+            $args = $action->get_args();
+            $fp   = $args['rule_fingerprint'] ?? null;
+            // actionهای بدون fingerprint (ذخیره‌شده قبل از این ورژن) دست‌نخورده می‌مانند
+            if ($fp === null || in_array($fp, $valid, true)) continue;
+            try {
+                $store->cancel_action($action_id);
+            } catch (Exception $e) {
+                error_log('[Payamito] cleanup_stale: failed to cancel action ' . $action_id);
+            }
+        }
     }
 
     private function format_delay(int $seconds): string {

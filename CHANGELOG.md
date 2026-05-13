@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.23.0] - 2026-05-13
+
+### Fixed
+- پیامک‌های قوانین حذف‌شده یا ویرایش‌شده دیگر ارسال نمی‌شوند: هر action با `rule_fingerprint` (hash تنظیمات قانون) ذخیره می‌شود؛ هنگام ذخیره‌ی قوانین، تمام actionهای pending با fingerprint منسوخ به‌طور خودکار کنسل می‌شوند
+
+---
+
 ## [2.22.0] - 2026-05-07
 
 ### Fixed
