@@ -120,13 +120,20 @@ class Payamito_Logger {
         $total        = array_sum($by_status);
         $success_rate = $total > 0 ? round($by_status['sent'] / $total * 100, 1) : 0;
 
-        // daily breakdown — last 30 days
+        // daily breakdown — last 30 days (all dates in WP site timezone)
+        $tz     = wp_timezone();
+        $now    = new DateTime('now', $tz);
+        $cutoff = (clone $now)->modify('-30 days')->format('Y-m-d H:i:s');
+
         $daily_rows = $wpdb->get_results(
-            "SELECT DATE(scheduled_at) AS day, status, COUNT(*) AS cnt
-             FROM $table
-             WHERE scheduled_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-             GROUP BY DATE(scheduled_at), status
-             ORDER BY day ASC",
+            $wpdb->prepare(
+                "SELECT DATE(scheduled_at) AS day, status, COUNT(*) AS cnt
+                 FROM $table
+                 WHERE scheduled_at >= %s
+                 GROUP BY DATE(scheduled_at), status
+                 ORDER BY day ASC",
+                $cutoff
+            ),
             ARRAY_A
         ) ?: [];
 
@@ -137,7 +144,7 @@ class Payamito_Logger {
 
         $daily = [];
         for ($i = 29; $i >= 0; $i--) {
-            $day     = date('Y-m-d', strtotime("-{$i} days"));
+            $day     = (clone $now)->modify("-{$i} days")->format('Y-m-d');
             $daily[] = [
                 'day'       => $day,
                 'sent'      => $daily_map[$day]['sent']      ?? 0,

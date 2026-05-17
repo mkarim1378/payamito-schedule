@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.27.0] - 2026-05-17
+
+### Fixed
+- آمار روزانه دیگر از timezone سرور PHP استفاده نمی‌کند — کلیدهای روزانه و بازه کوئری هر دو با timezone سایت وردپرس محاسبه می‌شوند (`wp_timezone()` و `DateTime`)
+- حذف در `uninstall.php` اکنون ابتدا ردیف‌های `actionscheduler_logs` مرتبط را پاک می‌کند و سپس `actionscheduler_actions` را — قبلاً ردیف‌های log به‌صورت orphaned باقی می‌ماندند
+
+---
+
 ## [2.26.0] - 2026-05-17
 
 ### Fixed

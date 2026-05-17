@@ -11,14 +11,20 @@ delete_option('payamito_credentials');
 delete_option('payamito_schedule_rules');
 delete_option('payamito_schedule_db_version');
 
-// ── لغو تمام AS actions پیامیتو (مستقیم از DB) ───────────────
+// ── حذف تمام AS actions پیامیتو (logs اول تا orphan نشه) ─────
 $hooks = ['payamito_execute_scheduled_sms', 'payamito_weekly_log_cleanup'];
 foreach ($hooks as $hook) {
-    $wpdb->delete(
-        $wpdb->prefix . 'actionscheduler_actions',
-        ['hook' => $hook],
-        ['%s']
+    $action_ids = $wpdb->get_col(
+        $wpdb->prepare(
+            "SELECT action_id FROM {$wpdb->prefix}actionscheduler_actions WHERE hook = %s",
+            $hook
+        )
     );
+    if ($action_ids) {
+        $ids_in = implode(',', array_map('intval', $action_ids));
+        $wpdb->query("DELETE FROM {$wpdb->prefix}actionscheduler_logs WHERE action_id IN ($ids_in)");
+        $wpdb->query("DELETE FROM {$wpdb->prefix}actionscheduler_actions WHERE action_id IN ($ids_in)");
+    }
 }
 
 // حذف گروه payamito-sms
