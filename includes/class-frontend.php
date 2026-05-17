@@ -70,6 +70,10 @@ class Payamito_Frontend {
             wp_send_json_error(['message' => 'سفارش یافت نشد.']);
         }
 
+        if (!in_array($order->get_status(), ['pending', 'on-hold'], true)) {
+            wp_send_json_error(['message' => 'این سفارش در وضعیتی نیست که امکان اعمال تخفیف داشته باشد.']);
+        }
+
         $coupon_code = strtolower($coupon_raw);
         $applied     = array_map('strtolower', $order->get_coupon_codes());
         if (in_array($coupon_code, $applied, true)) {
