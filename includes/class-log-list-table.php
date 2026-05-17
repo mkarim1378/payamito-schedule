@@ -85,7 +85,7 @@ class Payamito_Log_List_Table extends WP_List_Table {
     public function column_mobile($item): string {
         $phone = $item['mobile'];
         if (strlen($phone) > 6) {
-            $phone = substr($phone, 0, 4) . '***' . substr($phone, -3);
+            $phone = substr($phone, 0, 4) . '****' . substr($phone, -3);
         }
         return esc_html($phone);
     }

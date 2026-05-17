@@ -40,6 +40,10 @@ class Payamito_Api {
     }
 
     public function send_pattern_sms(string $mobile, int|string $body_id, array $args): mixed {
+        if (!is_numeric($body_id) || (int) $body_id <= 0) {
+            error_log('[Payamito] send_pattern_sms: invalid pattern code "' . $body_id . '"');
+            return null;
+        }
         try {
             $client = new SoapClient($this->endpoint, [
                 'connection_timeout' => 10,

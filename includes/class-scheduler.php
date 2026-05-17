@@ -380,29 +380,36 @@ class Payamito_Scheduler {
     public static function cleanup_stale_actions(array $rules): void {
         if (!function_exists('as_get_scheduled_actions')) return;
 
-        $valid = array_map([self::class, 'rule_fingerprint'], $rules);
+        $valid    = array_map([self::class, 'rule_fingerprint'], $rules);
+        $store    = ActionScheduler_Store::instance();
+        $per_page = 100;
+        $page     = 1;
 
-        $actions = as_get_scheduled_actions([
-            'hook'     => 'payamito_execute_scheduled_sms',
-            'status'   => ActionScheduler_Store::STATUS_PENDING,
-            'group'    => self::AS_GROUP,
-            'per_page' => 500,
-        ]);
+        do {
+            $actions = as_get_scheduled_actions([
+                'hook'     => 'payamito_execute_scheduled_sms',
+                'status'   => ActionScheduler_Store::STATUS_PENDING,
+                'group'    => self::AS_GROUP,
+                'per_page' => $per_page,
+                'page'     => $page,
+            ]);
 
-        if (empty($actions)) return;
+            if (empty($actions)) break;
 
-        $store = ActionScheduler_Store::instance();
-        foreach ($actions as $action_id => $action) {
-            $args = $action->get_args();
-            $fp   = $args['rule_fingerprint'] ?? null;
-            // actionهای بدون fingerprint (ذخیره‌شده قبل از این ورژن) دست‌نخورده می‌مانند
-            if ($fp === null || in_array($fp, $valid, true)) continue;
-            try {
-                $store->cancel_action($action_id);
-            } catch (Exception $e) {
-                error_log('[Payamito] cleanup_stale: failed to cancel action ' . $action_id);
+            foreach ($actions as $action_id => $action) {
+                $args = $action->get_args();
+                $fp   = $args['rule_fingerprint'] ?? null;
+                // actionهای بدون fingerprint (ذخیره‌شده قبل از این ورژن) دست‌نخورده می‌مانند
+                if ($fp === null || in_array($fp, $valid, true)) continue;
+                try {
+                    $store->cancel_action($action_id);
+                } catch (Exception $e) {
+                    error_log('[Payamito] cleanup_stale: failed to cancel action ' . $action_id);
+                }
             }
-        }
+
+            $page++;
+        } while (count($actions) === $per_page);
     }
 
     private function format_delay(int $seconds): string {
