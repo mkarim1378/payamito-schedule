@@ -77,8 +77,9 @@ class Payamito_Log_List_Table extends WP_List_Table {
     }
 
     public function column_order_id($item): string {
-        $id  = (int) $item['order_id'];
-        $url = admin_url("post.php?post={$id}&action=edit");
+        $id    = (int) $item['order_id'];
+        $order = wc_get_order($id);
+        $url   = $order ? $order->get_edit_order_url() : '#';
         return '<a href="' . esc_url($url) . '">#' . $id . '</a>';
     }
 

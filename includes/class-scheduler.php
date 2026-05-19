@@ -11,7 +11,7 @@ class Payamito_Scheduler {
         3 => 2  * HOUR_IN_SECONDS,
     ];
 
-    private const MAX_ATTEMPTS = 4;
+    public const MAX_ATTEMPTS = 4;
 
     private const AS_GROUP = 'payamito-sms';
 

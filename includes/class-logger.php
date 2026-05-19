@@ -37,21 +37,29 @@ class Payamito_Logger {
     public static function insert(array $data): int|false {
         global $wpdb;
 
-        $ok = $wpdb->insert(
-            self::table(),
-            [
-                'order_id'     => (int)    $data['order_id'],
-                'mobile'       =>           $data['mobile'],
-                'pattern'      =>           $data['pattern'],
-                'vars'         =>           $data['vars']         ?? '',
-                'status'       =>           $data['status'],
-                'response'     =>           $data['response']     ?? null,
-                'attempt'      => (int)   ($data['attempt']       ?? 1),
-                'scheduled_at' =>           $data['scheduled_at'] ?? current_time('mysql'),
-                'sent_at'      =>           $data['sent_at']      ?? null,
-            ],
-            ['%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s']
-        );
+        // Build row and format list without nullable DATETIME/TEXT columns.
+        // wpdb maps null → '' via %s, which fails in MySQL strict mode for DATETIME.
+        $row = [
+            'order_id'     => (int)    $data['order_id'],
+            'mobile'       => (string) ($data['mobile']       ?? ''),
+            'pattern'      => (string) ($data['pattern']      ?? ''),
+            'vars'         => (string) ($data['vars']         ?? ''),
+            'status'       => (string) ($data['status']       ?? 'failed'),
+            'attempt'      => (int)    ($data['attempt']      ?? 1),
+            'scheduled_at' => (string) ($data['scheduled_at'] ?? current_time('mysql')),
+        ];
+        $formats = ['%d', '%s', '%s', '%s', '%s', '%d', '%s'];
+
+        if (!empty($data['response'])) {
+            $row['response'] = (string) $data['response'];
+            $formats[]       = '%s';
+        }
+        if (isset($data['sent_at']) && $data['sent_at'] !== null) {
+            $row['sent_at'] = (string) $data['sent_at'];
+            $formats[]      = '%s';
+        }
+
+        $ok = $wpdb->insert(self::table(), $row, $formats);
 
         if ($ok) {
             delete_transient('payamito_stats_cache');
@@ -188,13 +196,22 @@ class Payamito_Logger {
 
     public static function update_status(int $id, string $status, ?string $response, ?string $sent_at): void {
         global $wpdb;
-        $wpdb->update(
-            self::table(),
-            ['status' => $status, 'response' => $response, 'sent_at' => $sent_at],
-            ['id' => $id],
-            ['%s', '%s', '%s'],
-            ['%d']
-        );
+        $table = self::table();
+
+        // wpdb::update can't emit NULL; build the SET clause manually so that
+        // nullable DATETIME/TEXT columns are written as SQL NULL, not ''.
+        $response_sql = $response !== null
+            ? $wpdb->prepare('response = %s', $response)
+            : 'response = NULL';
+        $sent_at_sql = $sent_at !== null
+            ? $wpdb->prepare('sent_at = %s', $sent_at)
+            : 'sent_at = NULL';
+
+        $wpdb->query($wpdb->prepare(
+            "UPDATE `$table` SET status = %s, $response_sql, $sent_at_sql WHERE id = %d",
+            $status,
+            $id
+        ));
         delete_transient('payamito_stats_cache');
     }
 

@@ -372,7 +372,9 @@ class Payamito_Admin {
             }
         }
 
-        do_action('payamito_execute_scheduled_sms', $order_id, $pat_code, $vars_str, null, 1, $send_type, $text_body, $coupon_enabled, $coupon_amount, $coupon_type, $coupon_expiry_hours, $coupon_mode);
+        // Pass MAX_ATTEMPTS as the attempt count so execute() skips retry scheduling
+        // for instant sends — a failed immediate send should not re-queue automatically.
+        do_action('payamito_execute_scheduled_sms', $order_id, $pat_code, $vars_str, null, Payamito_Scheduler::MAX_ATTEMPTS, $send_type, $text_body, $coupon_enabled, $coupon_amount, $coupon_type, $coupon_expiry_hours, $coupon_mode);
 
         wp_safe_redirect($back);
         exit;

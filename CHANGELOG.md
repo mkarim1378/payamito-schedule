@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.29.0] - 2026-05-19
+
+### Fixed
+- `Logger::insert()` اکنون ستون‌های nullable (`sent_at`، `response`) را از INSERT حذف می‌کند هنگامی که مقدارشان null است — قبلاً `%s` مقدار null را به `''` تبدیل می‌کرد که در MySQL strict mode باعث شکست silent کل INSERT می‌شد و هیچ لاگی ثبت نمی‌شد
+- `Logger::update_status()` اکنون برای ستون‌های nullable از SQL NULL استفاده می‌کند — قبلاً همان مشکل تبدیل null به empty string وجود داشت
+- `Log_List_Table::column_order_id()` اکنون از `$order->get_edit_order_url()` استفاده می‌کند — قبلاً لینک ویرایش سفارش از طریق `post.php?post=ID` ساخته می‌شد که در حالت HPOS (WooCommerce 8.2+) اشتباه بود
+- دکمه «ارسال فوری» دیگر پس از شکست ارسال، یک action retry جدید در صف برنامه‌ریزی نمی‌کند — قبلاً با `attempt=1` فراخوانی می‌شد که باعث می‌شد پس از رفرش صفحه، پیامک همچنان در صف نمایش داده شود
+
+---
+
 ## [2.28.0] - 2026-05-17
 
 ### Fixed
