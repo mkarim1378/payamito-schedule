@@ -82,7 +82,7 @@ class Payamito_Scheduler {
             }
             try {
                 $store->cancel_action($action_id);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 error_log('[Payamito] Failed to cancel action ' . $action_id . ': ' . $e->getMessage());
             }
         }
@@ -90,8 +90,22 @@ class Payamito_Scheduler {
 
     public function prevent_cancellation(int $order_id, string $from, string $to, $order): void {
         if ($to !== 'cancelled') return;
+        if (self::$reverting_cancellation) return;
+
         $credentials = get_option('payamito_credentials', []);
         if (empty($credentials['prevent_cancellation'])) return;
+
+        // Allow admins to intentionally cancel an order from the edit screen.
+        // Only block automatic/gateway-driven cancellations (cron, REST, webhooks).
+        if (
+            !wp_doing_cron()
+            && !wp_doing_ajax()
+            && !defined('REST_REQUEST')
+            && is_admin()
+            && current_user_can('manage_woocommerce')
+        ) {
+            return;
+        }
 
         self::$reverting_cancellation = true;
         $order->update_status('pending', '[پیامیتو] لغو سفارش بلوکه شد — وضعیت به «در انتظار پرداخت» برگشت.');
@@ -403,7 +417,7 @@ class Payamito_Scheduler {
                 if ($fp === null || in_array($fp, $valid, true)) continue;
                 try {
                     $store->cancel_action($action_id);
-                } catch (Exception $e) {
+                } catch (\Throwable $e) {
                     error_log('[Payamito] cleanup_stale: failed to cancel action ' . $action_id);
                 }
             }

@@ -275,7 +275,7 @@ class Payamito_Admin {
                     ]);
                 }
                 $store->cancel_action($action_id);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 error_log('[Payamito] Cancel action failed: ' . $e->getMessage());
             }
         }
@@ -333,7 +333,7 @@ class Payamito_Admin {
 
             try {
                 $store->cancel_action($action_id);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 error_log('[Payamito] Cancel all - failed for action ' . $action_id . ': ' . $e->getMessage());
             }
         }
@@ -367,7 +367,7 @@ class Payamito_Admin {
         if ($action_id) {
             try {
                 ActionScheduler_Store::instance()->cancel_action($action_id);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 error_log('[Payamito] Cancel in send_now failed: ' . $e->getMessage());
             }
         }

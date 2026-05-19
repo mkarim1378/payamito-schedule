@@ -13,6 +13,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - `Logger::update_status()` اکنون برای ستون‌های nullable از SQL NULL استفاده می‌کند — قبلاً همان مشکل تبدیل null به empty string وجود داشت
 - `Log_List_Table::column_order_id()` اکنون از `$order->get_edit_order_url()` استفاده می‌کند — قبلاً لینک ویرایش سفارش از طریق `post.php?post=ID` ساخته می‌شد که در حالت HPOS (WooCommerce 8.2+) اشتباه بود
 - دکمه «ارسال فوری» دیگر پس از شکست ارسال، یک action retry جدید در صف برنامه‌ریزی نمی‌کند — قبلاً با `attempt=1` فراخوانی می‌شد که باعث می‌شد پس از رفرش صفحه، پیامک همچنان در صف نمایش داده شود
+- `prevent_cancellation` اکنون هنگامی که ادمین از پنل مدیریت به صورت دستی سفارش را لغو می‌کند، بلوک نمی‌کند — قبلاً ادمین هم نمی‌توانست سفارش را به «لغو شده» ببرد؛ حالا فقط cancel های خودکار (درگاه، webhook، cron) بلوک می‌شوند
+- تمام `catch (Exception $e)` در `class-scheduler.php` و `class-admin.php` به `catch (\Throwable $e)` تبدیل شد تا خطاهای PHP 8 از نوع `Error` (مثل `TypeError`) هم صحیح مدیریت شوند و به WooCommerce propagate نشوند
 
 ---
 
