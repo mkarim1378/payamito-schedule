@@ -53,14 +53,16 @@ class Payamito_Admin {
         // ── پیامک‌های در صف ──────────────────────────────────────────
         if (!empty($scheduled)) :
             echo '<p style="font-weight:600;margin:0 0 6px;font-size:12px;color:#555;">⏳ برنامه‌ریزی شده:</p>';
-            if (count($scheduled) > 1) : ?>
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-bottom:8px;">
-                    <?php wp_nonce_field('payamito_cancel_all_sms', 'payamito_cancel_all_nonce'); ?>
-                    <input type="hidden" name="action"   value="payamito_cancel_all_sms">
-                    <input type="hidden" name="order_id" value="<?php echo (int) $order_id; ?>">
-                    <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;width:100%;"
-                        onclick="return confirm('همه پیامک‌های زمان‌بندی‌شده لغو شوند؟')">⊘ لغو همه پیامک‌ها (<?php echo count($scheduled); ?>)</button>
-                </form>
+            <?php if (count($scheduled) > 1) :
+                $cancel_all_url = wp_nonce_url(
+                    admin_url('admin-post.php?action=payamito_cancel_all_sms&order_id=' . (int) $order_id),
+                    'payamito_cancel_all_sms',
+                    'payamito_cancel_all_nonce'
+                ); ?>
+                <a href="<?php echo esc_url($cancel_all_url); ?>"
+                   class="button button-small"
+                   style="color:#a00;border-color:#a00;width:100%;display:block;text-align:center;box-sizing:border-box;margin-bottom:8px;"
+                   onclick="return confirm('همه پیامک‌های زمان‌بندی‌شده لغو شوند؟')">⊘ لغو همه پیامک‌ها (<?php echo count($scheduled); ?>)</a>
             <?php endif;
             foreach ($scheduled as $action_id => $action) :
                 $args           = $action->get_args();
@@ -113,31 +115,39 @@ class Payamito_Admin {
                     <?php if ($attempt > 1) : ?>
                         <div style="color:#999;margin-top:2px;">تلاش مجدد #<?php echo $attempt; ?></div>
                     <?php endif; ?>
+                    <?php
+                    $send_now_url = wp_nonce_url(
+                        admin_url('admin-post.php?' . http_build_query([
+                            'action'              => 'payamito_send_now',
+                            'action_id'           => (int) $action_id,
+                            'order_id'            => (int) ($args['order_id'] ?? 0),
+                            'pattern_code'        => $args['pattern_code']        ?? '',
+                            'vars_str'            => $args['vars_str']            ?? '',
+                            'send_type'           => $args['send_type']           ?? 'pattern',
+                            'text_body'           => $args['text_body']           ?? '',
+                            'coupon_enabled'      => (int)   ($args['coupon_enabled']      ?? 0),
+                            'coupon_amount'       => (float) ($args['coupon_amount']       ?? 0),
+                            'coupon_type'         => $args['coupon_type']         ?? 'percent',
+                            'coupon_expiry_hours' => (int)   ($args['coupon_expiry_hours'] ?? 24),
+                            'coupon_mode'         => $args['coupon_mode']         ?? 'code',
+                        ])),
+                        'payamito_send_now',
+                        'payamito_send_now_nonce'
+                    );
+                    $cancel_url = wp_nonce_url(
+                        admin_url('admin-post.php?action=payamito_cancel_sms&action_id=' . (int) $action_id),
+                        'payamito_cancel_sms',
+                        'payamito_cancel_nonce'
+                    );
+                    ?>
                     <div style="display:flex;gap:6px;margin-top:6px;">
-                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                            <?php wp_nonce_field('payamito_send_now', 'payamito_send_now_nonce'); ?>
-                            <input type="hidden" name="action"               value="payamito_send_now">
-                            <input type="hidden" name="action_id"            value="<?php echo (int) $action_id; ?>">
-                            <input type="hidden" name="order_id"             value="<?php echo (int) ($args['order_id'] ?? 0); ?>">
-                            <input type="hidden" name="pattern_code"         value="<?php echo esc_attr($args['pattern_code'] ?? ''); ?>">
-                            <input type="hidden" name="vars_str"             value="<?php echo esc_attr($args['vars_str'] ?? ''); ?>">
-                            <input type="hidden" name="send_type"            value="<?php echo esc_attr($args['send_type'] ?? 'pattern'); ?>">
-                            <input type="hidden" name="text_body"            value="<?php echo esc_attr($args['text_body'] ?? ''); ?>">
-                            <input type="hidden" name="coupon_enabled"       value="<?php echo (int) ($args['coupon_enabled'] ?? 0); ?>">
-                            <input type="hidden" name="coupon_amount"        value="<?php echo esc_attr($args['coupon_amount'] ?? 0); ?>">
-                            <input type="hidden" name="coupon_type"          value="<?php echo esc_attr($args['coupon_type'] ?? 'percent'); ?>">
-                            <input type="hidden" name="coupon_expiry_hours"  value="<?php echo (int) ($args['coupon_expiry_hours'] ?? 24); ?>">
-                            <input type="hidden" name="coupon_mode"          value="<?php echo esc_attr($args['coupon_mode'] ?? 'code'); ?>">
-                            <button type="submit" class="button button-small button-primary"
-                                onclick="return confirm('پیامک همین الان ارسال شود؟')">⚡ ارسال فوری</button>
-                        </form>
-                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                            <?php wp_nonce_field('payamito_cancel_sms', 'payamito_cancel_nonce'); ?>
-                            <input type="hidden" name="action"    value="payamito_cancel_sms">
-                            <input type="hidden" name="action_id" value="<?php echo (int) $action_id; ?>">
-                            <button type="submit" class="button button-small" style="color:#a00;border-color:#a00;"
-                                onclick="return confirm('آیا از لغو این پیامک مطمئن هستید؟')">⊘ لغو</button>
-                        </form>
+                        <a href="<?php echo esc_url($send_now_url); ?>"
+                           class="button button-small button-primary"
+                           onclick="return confirm('پیامک همین الان ارسال شود؟')">⚡ ارسال فوری</a>
+                        <a href="<?php echo esc_url($cancel_url); ?>"
+                           class="button button-small"
+                           style="color:#a00;border-color:#a00;"
+                           onclick="return confirm('آیا از لغو این پیامک مطمئن هستید؟')">⊘ لغو</a>
                     </div>
                 </div>
             <?php endforeach;
@@ -193,13 +203,15 @@ class Payamito_Admin {
                     <?php if ($entry['status'] === 'superseded' && !empty($entry['response'])) : ?>
                         <div style="color:#6e40c9;margin-top:2px;font-size:11px;">وضعیت جدید سفارش: <?php echo esc_html($entry['response']); ?></div>
                     <?php endif; ?>
-                    <?php if ($entry['status'] === 'failed') : ?>
-                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin-top:6px;">
-                            <?php wp_nonce_field('payamito_resend_sms', 'payamito_resend_nonce'); ?>
-                            <input type="hidden" name="action" value="payamito_resend_sms">
-                            <input type="hidden" name="log_id" value="<?php echo (int) $entry['id']; ?>">
-                            <button type="submit" class="button button-small">🔄 ارسال مجدد</button>
-                        </form>
+                    <?php if ($entry['status'] === 'failed') :
+                        $resend_url = wp_nonce_url(
+                            admin_url('admin-post.php?action=payamito_resend_sms&log_id=' . (int) $entry['id']),
+                            'payamito_resend_sms',
+                            'payamito_resend_nonce'
+                        ); ?>
+                        <a href="<?php echo esc_url($resend_url); ?>"
+                           class="button button-small"
+                           style="margin-top:6px;display:inline-block;">🔄 ارسال مجدد</a>
                     <?php endif; ?>
                 </div>
             <?php endforeach;
@@ -264,7 +276,7 @@ class Payamito_Admin {
         check_admin_referer('payamito_cancel_sms', 'payamito_cancel_nonce');
         if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
 
-        $action_id = (int) ($_POST['action_id'] ?? 0);
+        $action_id = (int) ($_REQUEST['action_id'] ?? 0);
         $back      = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
 
         if ($action_id) {
@@ -310,7 +322,7 @@ class Payamito_Admin {
         check_admin_referer('payamito_cancel_all_sms', 'payamito_cancel_all_nonce');
         if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
 
-        $order_id = (int) ($_POST['order_id'] ?? 0);
+        $order_id = (int) ($_REQUEST['order_id'] ?? 0);
         $back     = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
 
         if (!$order_id || !function_exists('as_get_scheduled_actions')) {
@@ -369,17 +381,17 @@ class Payamito_Admin {
         if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
 
         $back                = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
-        $action_id           = (int)    ($_POST['action_id']           ?? 0);
-        $order_id            = (int)    ($_POST['order_id']            ?? 0);
-        $send_type           = sanitize_text_field($_POST['send_type']           ?? 'pattern');
-        $text_body           = sanitize_textarea_field($_POST['text_body']       ?? '');
-        $pat_code            = sanitize_text_field($_POST['pattern_code']        ?? '');
-        $vars_str            = sanitize_textarea_field($_POST['vars_str']        ?? '');
-        $coupon_enabled      = (int)    ($_POST['coupon_enabled']      ?? 0);
-        $coupon_amount       = max(0, (float) ($_POST['coupon_amount'] ?? 0));
-        $coupon_type         = in_array($_POST['coupon_type'] ?? '', ['percent', 'fixed'], true) ? $_POST['coupon_type'] : 'percent';
-        $coupon_expiry_hours = max(1, (int) ($_POST['coupon_expiry_hours'] ?? 24));
-        $coupon_mode         = in_array($_POST['coupon_mode'] ?? '', ['code', 'payment'], true) ? $_POST['coupon_mode'] : 'code';
+        $action_id           = (int)    ($_REQUEST['action_id']           ?? 0);
+        $order_id            = (int)    ($_REQUEST['order_id']            ?? 0);
+        $send_type           = sanitize_text_field($_REQUEST['send_type']           ?? 'pattern');
+        $text_body           = sanitize_textarea_field($_REQUEST['text_body']       ?? '');
+        $pat_code            = sanitize_text_field($_REQUEST['pattern_code']        ?? '');
+        $vars_str            = sanitize_textarea_field($_REQUEST['vars_str']        ?? '');
+        $coupon_enabled      = (int)    ($_REQUEST['coupon_enabled']      ?? 0);
+        $coupon_amount       = max(0, (float) ($_REQUEST['coupon_amount'] ?? 0));
+        $coupon_type         = in_array($_REQUEST['coupon_type'] ?? '', ['percent', 'fixed'], true) ? $_REQUEST['coupon_type'] : 'percent';
+        $coupon_expiry_hours = max(1, (int) ($_REQUEST['coupon_expiry_hours'] ?? 24));
+        $coupon_mode         = in_array($_REQUEST['coupon_mode'] ?? '', ['code', 'payment'], true) ? $_REQUEST['coupon_mode'] : 'code';
 
         if (!$order_id) {
             wp_safe_redirect($back);
@@ -406,7 +418,7 @@ class Payamito_Admin {
         check_admin_referer('payamito_resend_sms', 'payamito_resend_nonce');
         if (!current_user_can('manage_woocommerce')) wp_die('Unauthorized');
 
-        $log_id = (int) ($_POST['log_id'] ?? 0);
+        $log_id = (int) ($_REQUEST['log_id'] ?? 0);
         $entry  = Payamito_Logger::get_by_id($log_id);
         $back   = wp_get_referer() ?: admin_url('edit.php?post_type=shop_order');
 
