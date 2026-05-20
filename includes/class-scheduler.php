@@ -170,7 +170,23 @@ class Payamito_Scheduler {
         if (in_array($order->get_status(), ['trash'], true)) return;
 
         // اگه وضعیت سفارش از زمان زمان‌بندی SMS تغییر کرده، این SMS منسوخ شده — ارسال نمیشه
-        if ($trigger_status !== '' && $order->get_status() !== $trigger_status) return;
+        // (معمولاً cancel_scheduled_for_order قبلاً این action را لغو کرده؛ این چک safety-net
+        //  است برای حالتی که افزونه در فاصله تغییر وضعیت غیرفعال بوده)
+        if ($trigger_status !== '' && $order->get_status() !== $trigger_status) {
+            $phone_raw = $order->get_billing_phone();
+            try { $phone_raw = self::normalize_phone($phone_raw); } catch (\InvalidArgumentException $e) {}
+            Payamito_Logger::insert([
+                'order_id'     => $order_id,
+                'mobile'       => $phone_raw,
+                'pattern'      => $send_type === 'text' ? 'text' : $pattern_code,
+                'vars'         => $send_type === 'text' ? $text_body : $vars_str,
+                'status'       => 'cancelled',
+                'response'     => 'وضعیت سفارش در زمان غیرفعال بودن افزونه تغییر کرده بود — پیامک ارسال نشد',
+                'attempt'      => $attempt,
+                'scheduled_at' => $scheduled_at ?? current_time('mysql'),
+            ]);
+            return;
+        }
 
         // اگه قانونی که این SMS رو زمانبندی کرده حذف یا ویرایش شده، ارسال نمیشه
         if ($rule_fingerprint !== '') {
