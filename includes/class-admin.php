@@ -53,7 +53,7 @@ class Payamito_Admin {
         // ── پیامک‌های در صف ──────────────────────────────────────────
         if (!empty($scheduled)) :
             echo '<p style="font-weight:600;margin:0 0 6px;font-size:12px;color:#555;">⏳ برنامه‌ریزی شده:</p>';
-            <?php if (count($scheduled) > 1) :
+            if (count($scheduled) > 1) :
                 $cancel_all_url = wp_nonce_url(
                     admin_url('admin-post.php?action=payamito_cancel_all_sms&order_id=' . (int) $order_id),
                     'payamito_cancel_all_sms',
