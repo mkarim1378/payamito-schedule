@@ -2,7 +2,7 @@
 /**
  * Plugin Name: زمان‌بندی پیامک پیامیتو
  * Description: افزونه جانبی برای ارسال زمان‌بندی شده پیامک‌های ووکامرس با پترن (خط خدماتی).
- * Version: 2.30.0
+ * Version: 2.31.0
  * Author: آکادمی کارنو
  * Author-URI: https://sepehralimohammadi.com
  * Requires Plugins: woocommerce
@@ -11,7 +11,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('PAYAMITO_SCHEDULE_VERSION', '2.30.0');
+define('PAYAMITO_SCHEDULE_VERSION', '2.31.0');
 define('PAYAMITO_SCHEDULE_DIR',     plugin_dir_path(__FILE__));
 define('PAYAMITO_SCHEDULE_URL',     plugin_dir_url(__FILE__));
 
@@ -62,6 +62,11 @@ register_activation_hook(__FILE__, function () {
     if (function_exists('as_has_scheduled_action') && !as_has_scheduled_action('payamito_weekly_log_cleanup', [], 'payamito-sms')) {
         as_schedule_recurring_action(time(), WEEK_IN_SECONDS, 'payamito_weekly_log_cleanup', [], 'payamito-sms');
     }
+    // اگه افزونه در دوره‌ای غیرفعال بوده و وضعیت سفارش‌ها عوض شده،
+    // یک job یک‌باره schedule می‌شه که بلافاصله stale actions رو پاکسازی می‌کنه
+    if (function_exists('as_schedule_single_action') && !as_has_scheduled_action('payamito_stale_action_cleanup', [], 'payamito-sms')) {
+        as_schedule_single_action(time(), 'payamito_stale_action_cleanup', [], 'payamito-sms');
+    }
     flush_rewrite_rules();
 });
 
@@ -70,6 +75,58 @@ register_deactivation_hook(__FILE__, function () {
         as_unschedule_all_actions('payamito_weekly_log_cleanup', [], 'payamito-sms');
     }
     flush_rewrite_rules();
+});
+
+add_action('payamito_stale_action_cleanup', function () {
+    if (!function_exists('as_get_scheduled_actions') || !class_exists('ActionScheduler_Store')) return;
+
+    $store    = ActionScheduler_Store::instance();
+    $per_page = 50;
+    $page     = 1;
+
+    do {
+        $actions = as_get_scheduled_actions([
+            'hook'     => 'payamito_execute_scheduled_sms',
+            'status'   => ActionScheduler_Store::STATUS_PENDING,
+            'group'    => 'payamito-sms',
+            'per_page' => $per_page,
+            'page'     => $page,
+        ]);
+
+        if (empty($actions)) break;
+
+        foreach ($actions as $action_id => $action) {
+            $args           = $action->get_args();
+            $trigger_status = $args['trigger_status'] ?? '';
+            if ($trigger_status === '') continue;
+
+            $order_id = (int) ($args['order_id'] ?? 0);
+            if (!$order_id) continue;
+
+            $order = wc_get_order($order_id);
+            if (!$order instanceof WC_Abstract_Order) continue;
+            if ($order->get_status() === $trigger_status) continue;
+
+            $phone     = $order->get_billing_phone();
+            $send_type = $args['send_type'] ?? 'pattern';
+            try { $phone = Payamito_Scheduler::normalize_phone($phone); } catch (\InvalidArgumentException $e) {}
+
+            Payamito_Logger::insert([
+                'order_id'     => $order_id,
+                'mobile'       => $phone,
+                'pattern'      => $send_type === 'text' ? 'text' : ($args['pattern_code'] ?? ''),
+                'vars'         => $send_type === 'text' ? ($args['text_body'] ?? '') : ($args['vars_str'] ?? ''),
+                'status'       => 'cancelled',
+                'response'     => 'وضعیت سفارش در زمان غیرفعال بودن افزونه تغییر کرد — پیامک لغو شد',
+                'attempt'      => (int) ($args['attempt'] ?? 1),
+                'scheduled_at' => $args['scheduled_at'] ?? current_time('mysql'),
+            ]);
+
+            try { $store->cancel_action($action_id); } catch (\Throwable $e) {}
+        }
+
+        $page++;
+    } while (count($actions) === $per_page);
 });
 
 add_action('payamito_weekly_log_cleanup', function () {

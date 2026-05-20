@@ -63,7 +63,29 @@ class Payamito_Admin {
                 </form>
             <?php endif;
             foreach ($scheduled as $action_id => $action) :
-                $args      = $action->get_args();
+                $args           = $action->get_args();
+                $trigger_status = $args['trigger_status'] ?? '';
+
+                // اگه وضعیت سفارش از زمان schedule شدن عوض شده (مثلاً افزونه غیرفعال بوده)،
+                // action رو همین‌جا cancel کن و نشانش نده — در تاریخچه ثبت می‌شه
+                if ($trigger_status !== '' && $order instanceof WC_Abstract_Order && $order->get_status() !== $trigger_status) {
+                    $phone     = $order->get_billing_phone();
+                    $st        = $args['send_type'] ?? 'pattern';
+                    try { $phone = Payamito_Scheduler::normalize_phone($phone); } catch (\InvalidArgumentException $e) {}
+                    Payamito_Logger::insert([
+                        'order_id'     => $order_id,
+                        'mobile'       => $phone,
+                        'pattern'      => $st === 'text' ? 'text' : ($args['pattern_code'] ?? ''),
+                        'vars'         => $st === 'text' ? ($args['text_body'] ?? '') : ($args['vars_str'] ?? ''),
+                        'status'       => 'cancelled',
+                        'response'     => 'وضعیت سفارش در زمان غیرفعال بودن افزونه تغییر کرد — پیامک لغو شد',
+                        'attempt'      => (int) ($args['attempt'] ?? 1),
+                        'scheduled_at' => $args['scheduled_at'] ?? current_time('mysql'),
+                    ]);
+                    try { ActionScheduler_Store::instance()->cancel_action($action_id); } catch (\Throwable $e) {}
+                    continue;
+                }
+
                 $send_type = $args['send_type'] ?? 'pattern';
                 $is_text   = $send_type === 'text';
                 $label     = $is_text ? 'متن ثابت' : ('پترن ' . ($args['pattern_code'] ?? ''));
