@@ -848,6 +848,10 @@ class Payamito_Admin {
                 <br><br>
                 <button type="submit" name="save_rules" class="button button-primary button-hero">ذخیره تنظیمات</button>
             </form>
+            <details style="margin-top:16px;">
+                <summary style="cursor:pointer;color:#666;font-size:12px;">خروجی JSON قوانین (برای پشتیبانی)</summary>
+                <textarea readonly onclick="this.select()" style="width:100%;height:180px;font-family:monospace;font-size:11px;margin-top:8px;direction:ltr;"><?php echo esc_textarea(wp_json_encode($rules, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)); ?></textarea>
+            </details>
         </div>
         <?php
     }
