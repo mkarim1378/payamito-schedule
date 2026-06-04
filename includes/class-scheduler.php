@@ -118,6 +118,15 @@ class Payamito_Scheduler {
         $rules           = get_option('payamito_schedule_rules', []);
         $prefixed_status = 'wc-' . $to_status;
 
+        // اگر آیتم‌های سفارش در این مرحله هنوز ذخیره نشده‌اند (مثلاً هنگام woocommerce_new_order)،
+        // یک بار دیگر از DB بارگذاری کن تا فیلتر محصول داده‌های به‌روز داشته باشد
+        if ($order instanceof WC_Abstract_Order && empty($order->get_items('line_item'))) {
+            $fresh = wc_get_order($order_id);
+            if ($fresh instanceof WC_Abstract_Order) {
+                $order = $fresh;
+            }
+        }
+
         foreach ($rules as $rule) {
             if ($rule['status'] !== $prefixed_status) continue;
 
@@ -409,6 +418,8 @@ class Payamito_Scheduler {
 
     private function is_filtered_by_product(WC_Abstract_Order $order, string $mode, array $filter_ids): bool {
         $filter_ids        = array_map('intval', array_filter($filter_ids));
+        if (empty($filter_ids)) return false;
+
         $order_product_ids = [];
         foreach ($order->get_items('line_item') as $item) {
             if (!($item instanceof WC_Order_Item_Product)) continue;
@@ -418,15 +429,8 @@ class Payamito_Scheduler {
             if ($vid > 0) $order_product_ids[] = $vid;
         }
 
-        if (function_exists('wc_get_logger')) {
-            wc_get_logger()->debug(
-                sprintf(
-                    '[Payamito] product_filter — order #%d, mode=%s, filter_ids=%s, order_product_ids=%s',
-                    $order->get_id(), $mode, json_encode($filter_ids), json_encode($order_product_ids)
-                ),
-                ['source' => 'payamito']
-            );
-        }
+        // اگر آیتم‌ها هنوز در دسترس نیستند، فیلتر نکن — execute-time با order تازه دوباره چک می‌کند
+        if (empty($order_product_ids)) return false;
 
         $has_match = !empty(array_intersect($filter_ids, $order_product_ids));
         // blacklist: اگه یکی از محصولات استثناشده در سفارش باشد → فیلتر (true = skip)
