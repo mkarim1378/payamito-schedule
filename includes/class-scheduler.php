@@ -5,6 +5,9 @@ class Payamito_Scheduler {
 
     private static bool $reverting_cancellation = false;
 
+    /** وضعیت‌های در انتظار زمان‌بندی — پر می‌شود در on_status_change، پردازش می‌شود در on_after_order_save */
+    private array $pending_status_changes = [];
+
     private const RETRY_DELAYS = [
         1 => 5  * MINUTE_IN_SECONDS,
         2 => 30 * MINUTE_IN_SECONDS,
@@ -19,6 +22,8 @@ class Payamito_Scheduler {
         add_action('woocommerce_order_status_changed',    [$this, 'on_status_change'],      10, 4);
         add_action('woocommerce_order_status_changed',    [$this, 'prevent_cancellation'],  20, 4);
         add_action('woocommerce_new_order',               [$this, 'on_new_order'],          10, 2);
+        // زمان‌بندی واقعی پس از اتمام کامل save() انجام می‌شود تا آیتم‌های سفارش حتماً در DB باشند
+        add_action('woocommerce_after_order_object_save', [$this, 'on_after_order_save'],   10, 1);
         add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 16);
         // Cancel scheduled SMS when an order is trashed or permanently deleted
         add_action('wp_trash_post',                       [$this, 'on_order_removed'],      10, 1);
@@ -114,12 +119,36 @@ class Payamito_Scheduler {
 
     public function on_status_change(int $order_id, string $from_status, string $to_status, $order): void {
         if (self::$reverting_cancellation) return;
+        // لغو فوری پیامک‌های قدیمی برای این سفارش
         self::cancel_scheduled_for_order($order_id, $to_status);
+        // زمان‌بندی جدید را به on_after_order_save موکول می‌کنیم تا آیتم‌ها در DB commit شده باشند
+        $this->pending_status_changes[$order_id] = $to_status;
+    }
+
+    public function on_after_order_save($object): void {
+        if (!$object instanceof WC_Abstract_Order) return;
+        $order_id = $object->get_id();
+        if (!isset($this->pending_status_changes[$order_id])) return;
+
+        $to_status = $this->pending_status_changes[$order_id];
+        unset($this->pending_status_changes[$order_id]);
+
+        // بارگذاری تازه از DB — در این مرحله آیتم‌های سفارش حتماً ذخیره شده‌اند
+        $order = wc_get_order($order_id);
+        if (!$order instanceof WC_Abstract_Order) return;
+
         $rules           = get_option('payamito_schedule_rules', []);
         $prefixed_status = 'wc-' . $to_status;
 
         foreach ($rules as $rule) {
             if ($rule['status'] !== $prefixed_status) continue;
+
+            // فیلتر محصول در زمان زمان‌بندی — آیتم‌ها اکنون مطمئناً در DB هستند
+            $filter_mode = $rule['product_filter_mode'] ?? 'none';
+            $filter_ids  = $rule['product_filter_ids']  ?? [];
+            if ($filter_mode !== 'none' && !empty($filter_ids)) {
+                if ($this->is_filtered_by_product($order, $filter_mode, $filter_ids)) continue;
+            }
 
             $delay  = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);
             $run_at = time() + $delay;
@@ -201,27 +230,10 @@ class Payamito_Scheduler {
         // سفارش رایگان: اگه قانون کد تخفیف داره ولی مبلغ سفارش صفره، پیامک ارسال نمیشه
         if ($coupon_enabled && $coupon_amount > 0 && $order->get_total() <= 0) return;
 
-        // فیلتر محصول: بلک لیست یا وایت لیست — اینجا اجرا می‌شود چون سفارش از DB تازه بارگذاری شده و آیتم‌ها مطمئناً موجودند
+        // safety-net: فیلتر محصول در زمان اجرا (در حالت عادی schedule-time آن را رد کرده؛ این برای edge caseها است)
         if ($product_filter_mode !== 'none') {
             $filter_ids = array_map('intval', array_filter(json_decode($product_filter_ids_json, true) ?: []));
-            if (!empty($filter_ids) && $this->is_filtered_by_product($order, $product_filter_mode, $filter_ids)) {
-                $phone_raw = $order->get_billing_phone();
-                try { $phone_raw = self::normalize_phone($phone_raw); } catch (\InvalidArgumentException $e) {}
-                Payamito_Logger::insert([
-                    'order_id'     => $order_id,
-                    'mobile'       => $phone_raw,
-                    'pattern'      => $send_type === 'text' ? 'text' : $pattern_code,
-                    'vars'         => $send_type === 'text' ? $text_body : $vars_str,
-                    'status'       => 'cancelled',
-                    'response'     => $product_filter_mode === 'blacklist'
-                        ? 'فیلتر بلک لیست — محصول سفارش در لیست استثنا بود'
-                        : 'فیلتر وایت لیست — هیچ‌یک از محصولات مجاز در سفارش نبود',
-                    'attempt'      => $attempt,
-                    'scheduled_at' => $scheduled_at ?? current_time('mysql'),
-                    'sent_at'      => null,
-                ]);
-                return;
-            }
+            if (!empty($filter_ids) && $this->is_filtered_by_product($order, $product_filter_mode, $filter_ids)) return;
         }
 
         $phone = $order->get_billing_phone();
