@@ -19,7 +19,7 @@ class Payamito_Scheduler {
         add_action('woocommerce_order_status_changed',    [$this, 'on_status_change'],      10, 4);
         add_action('woocommerce_order_status_changed',    [$this, 'prevent_cancellation'],  20, 4);
         add_action('woocommerce_new_order',               [$this, 'on_new_order'],          10, 2);
-        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 14);
+        add_action('payamito_execute_scheduled_sms',      [$this, 'execute'],               10, 16);
         // Cancel scheduled SMS when an order is trashed or permanently deleted
         add_action('wp_trash_post',                       [$this, 'on_order_removed'],      10, 1);
         add_action('before_delete_post',                  [$this, 'on_order_removed'],      10, 1);
@@ -125,20 +125,22 @@ class Payamito_Scheduler {
             $run_at = time() + $delay;
 
             $hook_args = [
-                'order_id'            => $order_id,
-                'pattern_code'        => $rule['pattern']              ?? '',
-                'vars_str'            => $rule['vars']                 ?? '',
-                'scheduled_at'        => date('Y-m-d H:i:s', $run_at),
-                'attempt'             => 1,
-                'send_type'           => $rule['send_type']            ?? 'pattern',
-                'text_body'           => $rule['text_body']            ?? '',
-                'coupon_enabled'      => (int)   ($rule['coupon_enabled']      ?? 0),
-                'coupon_amount'       => (float) ($rule['coupon_amount']       ?? 0),
-                'coupon_type'         => $rule['coupon_type']                  ?? 'percent',
-                'coupon_expiry_hours' => (int)   ($rule['coupon_expiry_hours'] ?? 24),
-                'coupon_mode'         => $rule['coupon_mode']                  ?? 'code',
-                'trigger_status'      => $to_status,
-                'rule_fingerprint'   => self::rule_fingerprint($rule),
+                'order_id'                => $order_id,
+                'pattern_code'            => $rule['pattern']              ?? '',
+                'vars_str'                => $rule['vars']                 ?? '',
+                'scheduled_at'            => date('Y-m-d H:i:s', $run_at),
+                'attempt'                 => 1,
+                'send_type'               => $rule['send_type']            ?? 'pattern',
+                'text_body'               => $rule['text_body']            ?? '',
+                'coupon_enabled'          => (int)   ($rule['coupon_enabled']      ?? 0),
+                'coupon_amount'           => (float) ($rule['coupon_amount']       ?? 0),
+                'coupon_type'             => $rule['coupon_type']                  ?? 'percent',
+                'coupon_expiry_hours'     => (int)   ($rule['coupon_expiry_hours'] ?? 24),
+                'coupon_mode'             => $rule['coupon_mode']                  ?? 'code',
+                'trigger_status'          => $to_status,
+                'rule_fingerprint'        => self::rule_fingerprint($rule),
+                'product_filter_mode'     => $rule['product_filter_mode']          ?? 'none',
+                'product_filter_ids_json' => wp_json_encode(array_values(array_map('intval', $rule['product_filter_ids'] ?? []))),
             ];
 
             if (as_has_scheduled_action('payamito_execute_scheduled_sms', $hook_args, self::AS_GROUP)) {
@@ -163,7 +165,9 @@ class Payamito_Scheduler {
         int $coupon_expiry_hours = 24,
         string $coupon_mode = 'code',
         string $trigger_status = '',
-        string $rule_fingerprint = ''
+        string $rule_fingerprint = '',
+        string $product_filter_mode = 'none',
+        string $product_filter_ids_json = '[]'
     ): void {
         $order = wc_get_order($order_id);
         if (!$order instanceof WC_Abstract_Order) return;
@@ -196,6 +200,12 @@ class Payamito_Scheduler {
 
         // سفارش رایگان: اگه قانون کد تخفیف داره ولی مبلغ سفارش صفره، پیامک ارسال نمیشه
         if ($coupon_enabled && $coupon_amount > 0 && $order->get_total() <= 0) return;
+
+        // فیلتر محصول: بلک لیست یا وایت لیست بر اساس محصولات سفارش
+        if ($product_filter_mode !== 'none') {
+            $filter_ids = json_decode($product_filter_ids_json, true) ?: [];
+            if (!empty($filter_ids) && $this->is_filtered_by_product($order, $product_filter_mode, $filter_ids)) return;
+        }
 
         $phone = $order->get_billing_phone();
         if (empty($phone)) return;
@@ -388,6 +398,20 @@ class Payamito_Scheduler {
         }
 
         return $code;
+    }
+
+    private function is_filtered_by_product(WC_Abstract_Order $order, string $mode, array $filter_ids): bool {
+        $order_product_ids = [];
+        foreach ($order->get_items() as $item) {
+            if (!($item instanceof WC_Order_Item_Product)) continue;
+            $order_product_ids[] = (int) $item->get_product_id();
+            $vid = (int) $item->get_variation_id();
+            if ($vid > 0) $order_product_ids[] = $vid;
+        }
+        $has_match = (bool) array_intersect($filter_ids, $order_product_ids);
+        // blacklist: اگه یکی از محصولات استثناشده در سفارش باشد → فیلتر (true = skip)
+        // whitelist: اگه هیچ‌کدام از محصولات مجاز در سفارش نباشد → فیلتر (true = skip)
+        return $mode === 'blacklist' ? $has_match : !$has_match;
     }
 
     public static function rule_fingerprint(array $rule): string {

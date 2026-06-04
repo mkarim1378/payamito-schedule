@@ -554,14 +554,16 @@ class Payamito_Admin {
         wp_enqueue_script(
             'payamito-admin',
             PAYAMITO_SCHEDULE_URL . 'assets/js/admin.js',
-            [],
+            ['jquery', 'selectWoo'],
             PAYAMITO_SCHEDULE_VERSION,
             true
         );
 
         wp_localize_script('payamito-admin', 'payamitoData', [
-            'statuses'      => wc_get_order_statuses(),
-            'confirmDelete' => 'آیا مطمئن هستید؟',
+            'statuses'            => wc_get_order_statuses(),
+            'confirmDelete'       => 'آیا مطمئن هستید؟',
+            'ajaxurl'             => admin_url('admin-ajax.php'),
+            'searchProductsNonce' => wp_create_nonce('search-products'),
         ]);
     }
 
@@ -939,6 +941,40 @@ class Payamito_Admin {
                     </table>
                 </div>
             </div>
+            <?php
+            $filter_mode = $rule['product_filter_mode'] ?? 'none';
+            $filter_ids  = $rule['product_filter_ids']  ?? [];
+            $selected_products = [];
+            foreach ($filter_ids as $pid) {
+                $product = wc_get_product((int) $pid);
+                if ($product) {
+                    $selected_products[] = ['id' => (int) $pid, 'name' => $product->get_name()];
+                }
+            }
+            ?>
+            <div class="product-filter-section" style="margin-top:10px;border-top:1px solid #eee;padding-top:10px;">
+                <strong>فیلتر محصول:</strong>
+                <label style="margin-right:12px;">
+                    <input type="radio" name="rules[<?php echo $index; ?>][product_filter_mode]" value="none" class="product-filter-mode" <?php checked($filter_mode, 'none'); ?>>
+                    بدون فیلتر
+                </label>
+                <label style="margin-right:12px;">
+                    <input type="radio" name="rules[<?php echo $index; ?>][product_filter_mode]" value="blacklist" class="product-filter-mode" <?php checked($filter_mode, 'blacklist'); ?>>
+                    بلک لیست — ارسال نشود
+                </label>
+                <label>
+                    <input type="radio" name="rules[<?php echo $index; ?>][product_filter_mode]" value="whitelist" class="product-filter-mode" <?php checked($filter_mode, 'whitelist'); ?>>
+                    وایت لیست — فقط ارسال شود
+                </label>
+                <div class="product-filter-fields" style="margin-top:8px;<?php echo $filter_mode === 'none' ? 'display:none;' : ''; ?>">
+                    <select name="rules[<?php echo $index; ?>][product_filter_ids][]" class="product-filter-select" multiple="multiple" style="width:100%;">
+                        <?php foreach ($selected_products as $p) : ?>
+                            <option value="<?php echo esc_attr($p['id']); ?>" selected="selected"><?php echo esc_html($p['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="description" style="margin-top:4px;">محصولاتی را انتخاب کنید که این قانون درباره آن‌ها اجرا نشود (بلک لیست) یا فقط برای آن‌ها اجرا شود (وایت لیست).</p>
+                </div>
+            </div>
             <button type="button" class="button remove-row" style="color:#a00;border-color:#a00;margin-top:10px;">حذف این قانون</button>
         </div>
         <?php
@@ -1027,6 +1063,9 @@ class Payamito_Admin {
             'coupon_type'         => in_array($r['coupon_type'] ?? '', ['percent', 'fixed'], true) ? $r['coupon_type'] : 'percent',
             'coupon_expiry_hours' => max(1, (int) ($r['coupon_expiry_hours']                   ?? 24)),
             'coupon_mode'         => in_array($r['coupon_mode'] ?? '', ['code', 'payment'], true) ? $r['coupon_mode'] : 'code',
+            'product_filter_mode' => in_array($r['product_filter_mode'] ?? '', ['none', 'blacklist', 'whitelist'], true)
+                ? $r['product_filter_mode'] : 'none',
+            'product_filter_ids'  => array_values(array_filter(array_map('absint', (array) ($r['product_filter_ids'] ?? [])))),
         ];
     }
 }

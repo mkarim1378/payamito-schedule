@@ -82,6 +82,25 @@ function buildRuleRow(index) {
                     </table>
                 </div>
             </div>
+            <div class="product-filter-section" style="margin-top:10px;border-top:1px solid #eee;padding-top:10px;">
+                <strong>فیلتر محصول:</strong>
+                <label style="margin-right:12px;">
+                    <input type="radio" name="rules[${index}][product_filter_mode]" value="none" class="product-filter-mode" checked>
+                    بدون فیلتر
+                </label>
+                <label style="margin-right:12px;">
+                    <input type="radio" name="rules[${index}][product_filter_mode]" value="blacklist" class="product-filter-mode">
+                    بلک لیست — ارسال نشود
+                </label>
+                <label>
+                    <input type="radio" name="rules[${index}][product_filter_mode]" value="whitelist" class="product-filter-mode">
+                    وایت لیست — فقط ارسال شود
+                </label>
+                <div class="product-filter-fields" style="margin-top:8px;display:none;">
+                    <select name="rules[${index}][product_filter_ids][]" class="product-filter-select" multiple="multiple" style="width:100%;"></select>
+                    <p class="description" style="margin-top:4px;">محصولاتی را انتخاب کنید که این قانون درباره آن‌ها اجرا نشود (بلک لیست) یا فقط برای آن‌ها اجرا شود (وایت لیست).</p>
+                </div>
+            </div>
             <button type="button" class="button remove-row"
                 style="color:#a00;border-color:#a00;margin-top:10px;">حذف این قانون</button>
         </div>`;
@@ -97,6 +116,41 @@ function toggleSendTypeFields(select) {
     var isText    = select.value === 'text';
     row.querySelector('.pattern-fields').style.display = isText ? 'none' : '';
     row.querySelector('.text-fields').style.display    = isText ? '' : 'none';
+}
+
+function toggleProductFilterFields(radio) {
+    var section = radio.closest('.product-filter-section');
+    var fields  = section.querySelector('.product-filter-fields');
+    if (fields) fields.style.display = radio.value === 'none' ? 'none' : '';
+}
+
+function initProductFilterSelect(select) {
+    if (typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
+    jQuery(select).select2({
+        ajax: {
+            url: payamitoData.ajaxurl,
+            dataType: 'json',
+            delay: 250,
+            data: function (params) {
+                return {
+                    action:   'woocommerce_json_search_products_and_variations',
+                    term:     params.term,
+                    security: payamitoData.searchProductsNonce
+                };
+            },
+            processResults: function (data) {
+                return {
+                    results: Object.entries(data || {}).map(function (entry) {
+                        return { id: entry[0], text: entry[1] };
+                    })
+                };
+            },
+            cache: true
+        },
+        minimumInputLength: 1,
+        placeholder: 'جستجوی محصول...',
+        width: '100%'
+    });
 }
 
 function validateRules(form) {
@@ -153,12 +207,16 @@ document.addEventListener('DOMContentLoaded', function () {
     // init toggles for existing saved rows
     document.querySelectorAll('#rules-container .send-type-select').forEach(toggleSendTypeFields);
     document.querySelectorAll('#rules-container .coupon-toggle').forEach(toggleCouponFields);
+    document.querySelectorAll('#rules-container .product-filter-mode:checked').forEach(toggleProductFilterFields);
+    document.querySelectorAll('#rules-container .product-filter-select').forEach(initProductFilterSelect);
 
     var addBtn = document.getElementById('add-rule');
     if (addBtn) {
         addBtn.addEventListener('click', function () {
             var container = document.getElementById('rules-container');
             container.insertAdjacentHTML('beforeend', buildRuleRow(Date.now()));
+            var newRow = container.lastElementChild;
+            initProductFilterSelect(newRow.querySelector('.product-filter-select'));
         });
     }
 
@@ -168,6 +226,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (e.target.classList.contains('coupon-toggle')) {
             toggleCouponFields(e.target);
+        }
+        if (e.target.classList.contains('product-filter-mode')) {
+            toggleProductFilterFields(e.target);
         }
     });
 
