@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.33.2] - 2026-06-04
+
+### Fixed
+- اضافه شدن دیباگ لاگ در `is_filtered_by_product` برای ثبت مقادیر واقعی `filter_ids` و `order_product_ids` در WooCommerce Logs (WooCommerce > Status > Logs > payamito) — کمک به تشخیص ریشه مشکل رفتار معکوس بلک لیست/وایت لیست
+- cast صریح `filter_ids` به integer قبل از مقایسه و استفاده از `get_items('line_item')` با نوع صریح
+
+---
+
 ## [2.33.1] - 2026-06-04
 
 ### Fixed

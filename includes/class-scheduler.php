@@ -408,14 +408,27 @@ class Payamito_Scheduler {
     }
 
     private function is_filtered_by_product(WC_Abstract_Order $order, string $mode, array $filter_ids): bool {
+        $filter_ids        = array_map('intval', array_filter($filter_ids));
         $order_product_ids = [];
-        foreach ($order->get_items() as $item) {
+        foreach ($order->get_items('line_item') as $item) {
             if (!($item instanceof WC_Order_Item_Product)) continue;
-            $order_product_ids[] = (int) $item->get_product_id();
+            $pid = (int) $item->get_product_id();
+            if ($pid > 0) $order_product_ids[] = $pid;
             $vid = (int) $item->get_variation_id();
             if ($vid > 0) $order_product_ids[] = $vid;
         }
-        $has_match = (bool) array_intersect($filter_ids, $order_product_ids);
+
+        if (function_exists('wc_get_logger')) {
+            wc_get_logger()->debug(
+                sprintf(
+                    '[Payamito] product_filter — order #%d, mode=%s, filter_ids=%s, order_product_ids=%s',
+                    $order->get_id(), $mode, json_encode($filter_ids), json_encode($order_product_ids)
+                ),
+                ['source' => 'payamito']
+            );
+        }
+
+        $has_match = !empty(array_intersect($filter_ids, $order_product_ids));
         // blacklist: اگه یکی از محصولات استثناشده در سفارش باشد → فیلتر (true = skip)
         // whitelist: اگه هیچ‌کدام از محصولات مجاز در سفارش نباشد → فیلتر (true = skip)
         return $mode === 'blacklist' ? $has_match : !$has_match;
