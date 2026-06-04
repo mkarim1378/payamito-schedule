@@ -118,24 +118,8 @@ class Payamito_Scheduler {
         $rules           = get_option('payamito_schedule_rules', []);
         $prefixed_status = 'wc-' . $to_status;
 
-        // اگر آیتم‌های سفارش در این مرحله هنوز ذخیره نشده‌اند (مثلاً هنگام woocommerce_new_order)،
-        // یک بار دیگر از DB بارگذاری کن تا فیلتر محصول داده‌های به‌روز داشته باشد
-        if ($order instanceof WC_Abstract_Order && empty($order->get_items('line_item'))) {
-            $fresh = wc_get_order($order_id);
-            if ($fresh instanceof WC_Abstract_Order) {
-                $order = $fresh;
-            }
-        }
-
         foreach ($rules as $rule) {
             if ($rule['status'] !== $prefixed_status) continue;
-
-            // فیلتر محصول در زمان زمان‌بندی: قانون‌های فیلترشده اصلاً schedule نمی‌شوند
-            $filter_mode = $rule['product_filter_mode'] ?? 'none';
-            $filter_ids  = $rule['product_filter_ids']  ?? [];
-            if ($filter_mode !== 'none' && !empty($filter_ids) && $order instanceof WC_Abstract_Order) {
-                if ($this->is_filtered_by_product($order, $filter_mode, $filter_ids)) continue;
-            }
 
             $delay  = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);
             $run_at = time() + $delay;
@@ -217,10 +201,27 @@ class Payamito_Scheduler {
         // سفارش رایگان: اگه قانون کد تخفیف داره ولی مبلغ سفارش صفره، پیامک ارسال نمیشه
         if ($coupon_enabled && $coupon_amount > 0 && $order->get_total() <= 0) return;
 
-        // فیلتر محصول: بلک لیست یا وایت لیست بر اساس محصولات سفارش
+        // فیلتر محصول: بلک لیست یا وایت لیست — اینجا اجرا می‌شود چون سفارش از DB تازه بارگذاری شده و آیتم‌ها مطمئناً موجودند
         if ($product_filter_mode !== 'none') {
-            $filter_ids = json_decode($product_filter_ids_json, true) ?: [];
-            if (!empty($filter_ids) && $this->is_filtered_by_product($order, $product_filter_mode, $filter_ids)) return;
+            $filter_ids = array_map('intval', array_filter(json_decode($product_filter_ids_json, true) ?: []));
+            if (!empty($filter_ids) && $this->is_filtered_by_product($order, $product_filter_mode, $filter_ids)) {
+                $phone_raw = $order->get_billing_phone();
+                try { $phone_raw = self::normalize_phone($phone_raw); } catch (\InvalidArgumentException $e) {}
+                Payamito_Logger::insert([
+                    'order_id'     => $order_id,
+                    'mobile'       => $phone_raw,
+                    'pattern'      => $send_type === 'text' ? 'text' : $pattern_code,
+                    'vars'         => $send_type === 'text' ? $text_body : $vars_str,
+                    'status'       => 'cancelled',
+                    'response'     => $product_filter_mode === 'blacklist'
+                        ? 'فیلتر بلک لیست — محصول سفارش در لیست استثنا بود'
+                        : 'فیلتر وایت لیست — هیچ‌یک از محصولات مجاز در سفارش نبود',
+                    'attempt'      => $attempt,
+                    'scheduled_at' => $scheduled_at ?? current_time('mysql'),
+                    'sent_at'      => null,
+                ]);
+                return;
+            }
         }
 
         $phone = $order->get_billing_phone();

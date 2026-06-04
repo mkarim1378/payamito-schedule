@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.33.4] - 2026-06-05
+
+### Fixed
+- حذف فیلتر محصول از مرحله schedule-time به‌طور کامل — WooCommerce hook‌ها (هم `woocommerce_new_order` هم `woocommerce_order_status_changed`) قبل از commit آیتم‌ها در DB فعال می‌شوند و هیچ روشی قابل‌اعتماد برای خواندن آیتم‌ها در این مرحله وجود ندارد
+- فیلتر محصول اکنون **فقط در execute-time** اجرا می‌شود — در این مرحله `wc_get_order()` سفارش را تازه از DB بارگذاری می‌کند و آیتم‌ها صد درصد موجودند
+- وقتی execute-time filter یک قانون را رد می‌کند (بلک لیست یا وایت لیست)، یک رکورد `cancelled` با دلیل در تاریخچه ارسال ثبت می‌شود
+
+---
+
 ## [2.33.3] - 2026-06-04
 
 ### Fixed
