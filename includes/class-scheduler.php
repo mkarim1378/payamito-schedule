@@ -121,6 +121,13 @@ class Payamito_Scheduler {
         foreach ($rules as $rule) {
             if ($rule['status'] !== $prefixed_status) continue;
 
+            // فیلتر محصول در زمان زمان‌بندی: قانون‌های فیلترشده اصلاً schedule نمی‌شوند
+            $filter_mode = $rule['product_filter_mode'] ?? 'none';
+            $filter_ids  = $rule['product_filter_ids']  ?? [];
+            if ($filter_mode !== 'none' && !empty($filter_ids) && $order instanceof WC_Abstract_Order) {
+                if ($this->is_filtered_by_product($order, $filter_mode, $filter_ids)) continue;
+            }
+
             $delay  = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);
             $run_at = time() + $delay;
 
