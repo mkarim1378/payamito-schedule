@@ -130,12 +130,12 @@ class Payamito_Scheduler {
         $order_id = $object->get_id();
         if (!isset($this->pending_status_changes[$order_id])) return;
 
+        // اگر این save هنوز آیتم ندارد (مثلاً اول wc_create_order() فراخوانی شده و بعد add_product)،
+        // pending_status_changes را نگه می‌داریم تا save بعدی که آیتم‌ها دارد پردازش کند
+        if (empty($object->get_items('line_item'))) return;
+
         $to_status = $this->pending_status_changes[$order_id];
         unset($this->pending_status_changes[$order_id]);
-
-        // بارگذاری تازه از DB — در این مرحله آیتم‌های سفارش حتماً ذخیره شده‌اند
-        $order = wc_get_order($order_id);
-        if (!$order instanceof WC_Abstract_Order) return;
 
         $rules           = get_option('payamito_schedule_rules', []);
         $prefixed_status = 'wc-' . $to_status;
@@ -143,11 +143,11 @@ class Payamito_Scheduler {
         foreach ($rules as $rule) {
             if ($rule['status'] !== $prefixed_status) continue;
 
-            // فیلتر محصول در زمان زمان‌بندی — آیتم‌ها اکنون مطمئناً در DB هستند
+            // فیلتر محصول در زمان زمان‌بندی — از $object استفاده می‌کنیم (همین save، کش معتبر)
             $filter_mode = $rule['product_filter_mode'] ?? 'none';
             $filter_ids  = $rule['product_filter_ids']  ?? [];
             if ($filter_mode !== 'none' && !empty($filter_ids)) {
-                if ($this->is_filtered_by_product($order, $filter_mode, $filter_ids)) continue;
+                if ($this->is_filtered_by_product($object, $filter_mode, $filter_ids)) continue;
             }
 
             $delay  = $this->to_seconds((int) $rule['delay_val'], $rule['delay_unit']);

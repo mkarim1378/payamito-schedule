@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.34.1] - 2026-06-05
+
+### Fixed
+- رفع مشکل فیلتر محصول برای سفارش‌های ساخته‌شده با `wc_create_order()` و افزونه‌های شخص ثالث: وقتی سفارش در دو مرحله ذخیره می‌شود (یک بار بدون آیتم، یک بار با آیتم)، `on_after_order_save` تا زمانی که آیتم‌ها در `$object` موجود نباشند منتظر می‌ماند و `pending_status_changes` را نگه می‌دارد تا save بعدی پردازش کند
+- از `$object` (instance همان save) به جای `wc_get_order()` استفاده می‌شود تا از مشکل object cache جلوگیری شود
+
+---
+
 ## [2.34.0] - 2026-06-05
 
 ### Changed
